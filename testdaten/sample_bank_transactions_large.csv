@@ -1,0 +1,41 @@
+bank_transaction_id,booking_date,reference_text,amount,currency,counterparty
+bank_001,2026-07-03,STRIPE PAYOUT txn_001,49.67,EUR,Stripe Payments Europe
+bank_002,2026-07-04,STRIPE PAYOUT txn_002,50.84,EUR,Stripe Payments Europe
+bank_003,2026-07-05,STRIPE PAYOUT txn_003,52.01,EUR,Stripe Payments Europe
+bank_004,2026-07-06,STRIPE PAYOUT txn_004,53.18,EUR,Stripe Payments Europe
+bank_005,2026-07-07,STRIPE PAYOUT txn_005,55.35,EUR,Stripe Payments Europe
+bank_006,2026-07-08,STRIPE PAYOUT txn_006,56.52,EUR,Stripe Payments Europe
+bank_007,2026-07-09,STRIPE PAYOUT txn_007,57.69,EUR,Stripe Payments Europe
+bank_008,2026-07-10,STRIPE PAYOUT txn_008,58.86,EUR,Stripe Payments Europe
+bank_009,2026-07-11,STRIPE PAYOUT txn_009,60.03,EUR,Stripe Payments Europe
+bank_010,2026-07-02,STRIPE PAYOUT txn_010,62.20,EUR,Stripe Payments Europe
+bank_011,2026-07-03,STRIPE PAYOUT txn_011,63.37,EUR,Stripe Payments Europe
+bank_012,2026-07-04,STRIPE PAYOUT txn_012,64.54,EUR,Stripe Payments Europe
+bank_013,2026-07-05,STRIPE PAYOUT txn_013,65.71,EUR,Stripe Payments Europe
+bank_014,2026-07-06,STRIPE PAYOUT txn_014,66.88,EUR,Stripe Payments Europe
+bank_015,2026-07-07,STRIPE PAYOUT txn_015,69.05,EUR,Stripe Payments Europe
+bank_016,2026-07-08,STRIPE PAYOUT txn_016,70.22,EUR,Stripe Payments Europe
+bank_017,2026-07-09,STRIPE PAYOUT txn_017,71.39,EUR,Stripe Payments Europe
+bank_018,2026-07-10,STRIPE PAYOUT txn_018,72.56,EUR,Stripe Payments Europe
+bank_019,2026-07-11,STRIPE PAYOUT txn_019,73.73,EUR,Stripe Payments Europe
+bank_020,2026-07-02,STRIPE PAYOUT txn_020,75.90,EUR,Stripe Payments Europe
+bank_021,2026-07-03,STRIPE PAYOUT txn_021,77.07,EUR,Stripe Payments Europe
+bank_022,2026-07-04,STRIPE PAYOUT txn_022,78.24,EUR,Stripe Payments Europe
+bank_023,2026-07-05,STRIPE PAYOUT txn_023,79.41,EUR,Stripe Payments Europe
+bank_024,2026-07-06,STRIPE PAYOUT txn_024,80.58,EUR,Stripe Payments Europe
+bank_025,2026-07-07,STRIPE PAYOUT txn_025,82.75,EUR,Stripe Payments Europe
+bank_026,2026-07-08,STRIPE PAYOUT txn_026,76.42,EUR,Stripe Payments Europe
+bank_027,2026-07-09,STRIPE PAYOUT txn_027,77.59,EUR,Stripe Payments Europe
+bank_028,2026-07-10,STRIPE PAYOUT txn_028,78.76,EUR,Stripe Payments Europe
+bank_029,2026-07-11,STRIPE PAYOUT txn_029,79.93,EUR,Stripe Payments Europe
+bank_030,2026-07-02,STRIPE PAYOUT txn_030,82.10,EUR,Stripe Payments Europe
+bank_900,2026-07-01,STRIPE PAYOUT txn_900,25.00,EUR,Stripe Payments Europe
+bank_901,2026-07-02,STRIPE PAYOUT txn_901,25.00,EUR,Stripe Payments Europe
+bank_902,2026-07-03,STRIPE PAYOUT txn_902,25.00,EUR,Stripe Payments Europe
+bank_903,2026-07-04,STRIPE PAYOUT txn_903,25.00,EUR,Stripe Payments Europe
+bank_904,2026-07-05,STRIPE PAYOUT txn_904,25.00,EUR,Stripe Payments Europe
+bank_pp_001,2026-07-02,PAYPAL PAYOUT pp_001,60.00,EUR,PayPal Europe
+bank_pp_002,2026-07-03,PAYPAL PAYOUT pp_002,60.00,EUR,PayPal Europe
+bank_pp_003,2026-07-04,PAYPAL PAYOUT pp_003,60.00,EUR,PayPal Europe
+bank_fee_001,2026-07-11,BANK SERVICE FEE,-5.00,EUR,Bank
+bank_misc_001,2026-07-12,UNKNOWN TRANSFER,18.00,EUR,Unknown

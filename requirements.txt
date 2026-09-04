@@ -1,0 +1,6 @@
+pandas==3.0.3
+psycopg2-binary==2.9.12
+python-dotenv==1.2.2
+stripe==15.5.0
+dbt-core==1.12.2
+dbt-postgres==1.11.0

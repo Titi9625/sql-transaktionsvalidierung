@@ -1,0 +1,136 @@
+version: 2
+
+models:
+  - name: dbt_stg_payment_transactions
+    description: "Normalisierte Payment-Provider-Transaktionen im dbt-Staging-Layer."
+    columns:
+      - name: transaction_id
+        description: "Eindeutige Transaktions-ID des Payment Providers. Im Testdatensatz bewusst nicht immer eindeutig, da Duplikate geprüft werden."
+        data_tests:
+          - not_null
+
+      - name: currency
+        description: "Normalisierte Währung der Payment-Provider-Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['EUR', 'USD']
+
+      - name: status
+        description: "Status der Payment-Provider-Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['available', 'pending']
+
+      - name: transaction_type
+        description: "Art der Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['charge', 'refund']
+
+
+  - name: dbt_stg_bank_transactions
+    description: "Normalisierte Bankexport-Daten im dbt-Staging-Layer."
+    columns:
+      - name: bank_transaction_id
+        description: "Eindeutige ID der Bankbuchung."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: currency
+        description: "Währung der Bankbuchung."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['EUR']
+
+
+  - name: dbt_invalid_transactions
+    description: "dbt-View mit allen erkannten Validierungsfehlern."
+    columns:
+      - name: transaction_id
+        description: "ID der betroffenen Transaktion oder Bankbuchung."
+        data_tests:
+          - not_null
+
+      - name: record_source
+        description: "Quelle des fehlerhaften Datensatzes."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['payment_provider', 'bank_export']
+
+      - name: error_code
+        description: "Technischer Fehlercode der Validierungsregel."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - amount_mismatch
+                  - bank_reference_id_not_extractable
+                  - duplicate_transaction_id
+                  - invalid_currency
+                  - missing_amount
+                  - missing_bank_match
+                  - pending_transaction
+                  - refund_transaction
+                  - unmatched_bank_transaction
+
+
+  - name: dbt_valid_transactions
+    description: "dbt-View mit gültigen Transaktionen nach der Validierung."
+    columns:
+      - name: transaction_id
+        description: "ID der gültigen Transaktion."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: currency
+        description: "Währung der gültigen Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['EUR']
+
+      - name: status
+        description: "Status der gültigen Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['available']
+
+      - name: validation_status
+        description: "Validierungsstatus der Transaktion."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['valid']
+
+
+  - name: dbt_validation_summary
+    description: "Zusammenfassung des dbt-Validierungslaufs."
+    columns:
+      - name: validation_date
+        description: "Datum des Validierungslaufs."
+        data_tests:
+          - not_null
+
+      - name: total_payment_records
+        description: "Anzahl der Payment-Provider-Datensätze."
+        data_tests:
+          - not_null
+
+      - name: total_bank_records
+        description: "Anzahl der Bankdatensätze."
+        data_tests:
+          - not_null
+
+      - name: total_validation_errors
+        description: "Anzahl der erkannten Validierungsfehler."
+        data_tests:
+          - not_null

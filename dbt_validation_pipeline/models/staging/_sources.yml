@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: raw_data
+    database: bachelorarbeit_validation
+    schema: public
+    tables:
+      - name: raw_payment_transactions
+        description: "Rohdatentabelle mit importierten Payment-Provider-Transaktionen."
+      - name: raw_bank_transactions
+        description: "Rohdatentabelle mit importierten Bankexport-Daten."

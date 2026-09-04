@@ -1,0 +1,18 @@
+# Beispiel-Profil fuer dbt. Normalerweise liegt diese Datei NICHT im Projektordner,
+# sondern unter ~/.dbt/profiles.yml (bzw. %USERPROFILE%\.dbt\profiles.yml unter Windows).
+# Kopieren, "your_local_password" durch das eigene lokale Postgres-Passwort ersetzen.
+# Der Profilname "bachelorarbeit_validation" muss exakt mit "profile:" in dbt_project.yml uebereinstimmen.
+
+bachelorarbeit_validation:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: postgres
+      password: "your_local_password"
+      port: 5432
+      dbname: bachelorarbeit_validation
+      schema: public
+      threads: 4
+      connect_timeout: 10
