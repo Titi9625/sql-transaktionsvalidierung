@@ -2,7 +2,7 @@ version: 2
 
 sources:
   - name: raw_data
-    database: bachelorarbeit_validation
+    database: "{{ target.database }}"
     schema: public
     tables:
       - name: raw_payment_transactions

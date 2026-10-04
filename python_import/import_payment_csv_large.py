@@ -6,9 +6,9 @@ import psycopg2
 from dotenv import load_dotenv
 
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-CSV_PATH = BASE_DIR / "04_Daten (Data)" / "Beispieldaten (Sample Data)" / "sample_stripe_transactions_large.csv"
-ENV_PATH = Path(__file__).resolve().parent / ".env"
+BASE_DIR = Path(__file__).resolve().parents[1]
+CSV_PATH = BASE_DIR / "testdaten" / "sample_stripe_transactions_large.csv"
+ENV_PATH = BASE_DIR / ".env"
 
 
 def to_int(value):
