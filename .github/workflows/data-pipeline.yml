@@ -2,7 +2,7 @@ name: Data pipeline checks
 
 "on":
   push:
-    branches: [main, portfolio-improvements]
+    branches: [main, portfolio-improvements, analytics-reporting]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -91,8 +91,9 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Data pipeline checks passed
           - Two complete runs against an isolated PostgreSQL 18 database.
-          - Each run built 5 dbt views and passed 22 dbt data tests.
+          - Each run built 6 dbt views and passed 28 dbt data tests.
           - Fixed-fixture assertions checked 50 payment rows, 40 bank rows, 20 valid results and 46 error rows.
+          - Reporting assertions checked distinct payment counts, classification, dates and aggregation totals.
           - Four Python tests checked rollback/logging for both importers and runner control flow.
           - Rollback tests intentionally created two failed import-log entries.
           EOF
