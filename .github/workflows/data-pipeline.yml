@@ -1,0 +1,98 @@
+name: Data pipeline checks
+
+"on":
+  push:
+    branches: [main, portfolio-improvements]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-pipeline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: portfolio_validation
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d portfolio_validation"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install project dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements.txt
+
+      - name: Configure the disposable test database
+        run: |
+          .venv/bin/python - <<'PY'
+          from pathlib import Path
+          import psycopg2
+
+          # These credentials belong only to this job's disposable service.
+          Path(".env").write_text(
+              "DB_HOST=localhost\nDB_PORT=5432\n"
+              "DB_NAME=portfolio_validation\nDB_USER=postgres\n"
+              "DB_PASSWORD=ci_test_password\nSTRIPE_SECRET_KEY=\n",
+              encoding="utf-8",
+          )
+          connection = psycopg2.connect(
+              host="localhost", port=5432, dbname="portfolio_validation",
+              user="postgres", password="ci_test_password",
+          )
+          try:
+              with connection:
+                  with connection.cursor() as cursor:
+                      for name in ("00_create_raw_tables.sql", "04_create_import_runs.sql"):
+                          cursor.execute((Path("sql_views") / name).read_text(encoding="utf-8-sig"))
+          finally:
+              connection.close()
+          PY
+
+      - name: Run the complete pipeline
+        run: .venv/bin/python run_pipeline.py
+
+      - name: Repeat the pipeline against existing data and views
+        run: .venv/bin/python run_pipeline.py
+
+      - name: Test rollback, failed-import logging and runner control flow
+        run: .venv/bin/python -m unittest discover -s tests -v
+
+      - name: Write successful-check summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Data pipeline checks passed
+          - Two complete runs against an isolated PostgreSQL 18 database.
+          - Each run built 5 dbt views and passed 22 dbt data tests.
+          - Fixed-fixture assertions checked 50 payment rows, 40 bank rows, 20 valid results and 46 error rows.
+          - Four Python tests checked rollback/logging for both importers and runner control flow.
+          - Rollback tests intentionally created two failed import-log entries.
+          EOF

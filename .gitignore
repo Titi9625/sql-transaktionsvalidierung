@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+/dbt_validation_pipeline/profiles.yml
+/dbt_validation_pipeline/.user.yml
