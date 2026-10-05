@@ -1,15 +1,17 @@
 from pathlib import Path
-import os
 from decimal import Decimal
 
 import pandas as pd
 import psycopg2
-from dotenv import load_dotenv
+from dotenv import dotenv_values
+
+from import_logging import start_import, finish_import, fail_import
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 CSV_PATH = BASE_DIR / "testdaten" / "sample_bank_transactions_large.csv"
 ENV_PATH = BASE_DIR / ".env"
+
 
 def to_decimal(value):
     if pd.isna(value) or str(value).strip() == "":
@@ -18,58 +20,73 @@ def to_decimal(value):
 
 
 def main():
-    load_dotenv(ENV_PATH)
-
-    if not CSV_PATH.exists():
-        raise FileNotFoundError(f"CSV file not found: {CSV_PATH}")
-
-    df = pd.read_csv(CSV_PATH)
+    settings = dotenv_values(ENV_PATH)
 
     connection = psycopg2.connect(
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT"),
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
+        host=settings["DB_HOST"],
+        port=settings["DB_PORT"],
+        dbname=settings["DB_NAME"],
+        user=settings["DB_USER"],
+        password=settings["DB_PASSWORD"],
     )
 
-    cursor = connection.cursor()
+    run_id = None
 
-    cursor.execute("TRUNCATE TABLE raw_bank_transactions;")
-
-    insert_sql = """
-        INSERT INTO raw_bank_transactions (
-            bank_transaction_id,
-            booking_date,
-            reference_text,
-            amount,
-            currency,
-            counterparty
+    try:
+        run_id = start_import(
+            connection,
+            CSV_PATH.name,
+            "raw_bank_transactions",
         )
-        VALUES (%s, %s, %s, %s, %s, %s);
-    """
 
-    inserted_rows = 0
+        df = pd.read_csv(CSV_PATH)
 
-    for _, row in df.iterrows():
-        cursor.execute(
-            insert_sql,
-            (
-                row["bank_transaction_id"],
-                row["booking_date"],
-                row["reference_text"],
-                to_decimal(row["amount"]),
-                row["currency"],
-                row["counterparty"],
-            ),
-        )
-        inserted_rows += 1
+        insert_sql = """
+            INSERT INTO public.raw_bank_transactions (
+                bank_transaction_id, booking_date,
+                reference_text, amount, currency, counterparty
+            )
+            VALUES (%s, %s, %s, %s, %s, %s);
+        """
 
-    connection.commit()
-    cursor.close()
-    connection.close()
+        inserted_rows = 0
 
-    print(f"Bank CSV imported successfully. Rows inserted: {inserted_rows}")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "TRUNCATE TABLE public.raw_bank_transactions;"
+            )
+
+            for _, row in df.iterrows():
+                cursor.execute(
+                    insert_sql,
+                    (
+                        row["bank_transaction_id"],
+                        row["booking_date"],
+                        row["reference_text"],
+                        to_decimal(row["amount"]),
+                        row["currency"],
+                        row["counterparty"],
+                    ),
+                )
+                inserted_rows += 1
+
+        finish_import(connection, run_id, inserted_rows)
+        connection.commit()
+
+    except Exception as error:
+        if run_id is not None:
+            fail_import(connection, run_id, error)
+        else:
+            connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+    print(
+        f"Bank CSV imported successfully. "
+        f"Rows inserted: {inserted_rows}. Run ID: {run_id}"
+    )
 
 
 if __name__ == "__main__":
