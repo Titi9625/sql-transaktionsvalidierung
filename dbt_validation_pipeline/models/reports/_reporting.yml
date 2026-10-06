@@ -1,0 +1,46 @@
+version: 2
+
+models:
+  - name: mart_daily_reconciliation
+    description: >-
+      Daily payment reconciliation and validation report. Grain: one row per
+      payment_date and source_system, based on the currently loaded CSV snapshot.
+      A payment counts as valid only if it appears in dbt_valid_transactions.
+      Pending payments, refunds and other flagged cases remain in the denominator.
+      The report covers payment-provider records, including payment-side bank
+      matching errors; bank-only error rows are excluded. The current project has
+      one source_system (stripe_sample_csv). Transaction IDs are assumed to identify
+      the same payment across its duplicate source rows and to have one payment date.
+      Ambiguous or missing payment dates cause the reporting consistency test to fail.
+    columns:
+      - name: reporting_key
+        description: "Unique key made from payment_date and source_system."
+        data_tests:
+          - not_null
+          - unique
+      - name: payment_date
+        description: "Provider transaction date; not the bank booking or pipeline run date."
+        data_tests:
+          - not_null
+      - name: source_system
+        description: "Payment ingestion source. Currently stripe_sample_csv; not the charge reference."
+        data_tests:
+          - not_null
+      - name: payment_row_count
+        description: "Number of source payment rows, including deliberate duplicates."
+      - name: distinct_payment_count
+        description: "Number of distinct payment IDs; the denominator of the pass rate."
+      - name: valid_payment_count
+        description: "Distinct payment IDs that pass all current validity conditions."
+      - name: flagged_payment_count
+        description: "Distinct payment IDs with at least one payment-provider validation flag. Pending/refund are scenario exceptions, not necessarily corrupt data."
+      - name: payment_error_row_count
+        description: "Number of payment-provider error rows; multiple rules or duplicate source rows can yield several error rows for one ID. Excludes bank-only errors."
+      - name: duplicate_payment_id_count
+        description: "Number of payment IDs occurring more than once, not the number of duplicate error rows."
+      - name: validation_pass_rate_pct
+        description: "100 * valid_payment_count / distinct_payment_count, rounded to two decimals. All distinct payment IDs are included in the denominator. Overall rates must be recomputed from summed counts, not averaged over daily percentages."
+        data_tests:
+          - not_null
+      - name: valid_net_amount_eur
+        description: "Sum of provider net amounts for valid EUR payments. Not gross sales, provider balance, or a payout total."
