@@ -1,136 +1,251 @@
 version: 2
-
 models:
-  - name: dbt_stg_payment_transactions
-    description: "Normalisierte Payment-Provider-Transaktionen im dbt-Staging-Layer."
-    columns:
-      - name: transaction_id
-        description: "Eindeutige Transaktions-ID des Payment Providers. Im Testdatensatz bewusst nicht immer eindeutig, da Duplikate geprüft werden."
-        data_tests:
-          - not_null
-
-      - name: currency
-        description: "Normalisierte Währung der Payment-Provider-Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['EUR', 'USD']
-
-      - name: status
-        description: "Status der Payment-Provider-Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['available', 'pending']
-
-      - name: transaction_type
-        description: "Art der Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['charge', 'refund']
-
-
-  - name: dbt_stg_bank_transactions
-    description: "Normalisierte Bankexport-Daten im dbt-Staging-Layer."
-    columns:
-      - name: bank_transaction_id
-        description: "Eindeutige ID der Bankbuchung."
-        data_tests:
-          - not_null
-          - unique
-
-      - name: currency
-        description: "Währung der Bankbuchung."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['EUR']
-
-
-  - name: dbt_invalid_transactions
-    description: "dbt-View mit allen erkannten Validierungsfehlern."
-    columns:
-      - name: transaction_id
-        description: "ID der betroffenen Transaktion oder Bankbuchung."
-        data_tests:
-          - not_null
-
-      - name: record_source
-        description: "Quelle des fehlerhaften Datensatzes."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['payment_provider', 'bank_export']
-
-      - name: error_code
-        description: "Technischer Fehlercode der Validierungsregel."
-        data_tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values:
-                  - amount_mismatch
-                  - bank_reference_id_not_extractable
-                  - duplicate_transaction_id
-                  - invalid_currency
-                  - missing_amount
-                  - missing_bank_match
-                  - pending_transaction
-                  - refund_transaction
-                  - unmatched_bank_transaction
-
-
-  - name: dbt_valid_transactions
-    description: "dbt-View mit gültigen Transaktionen nach der Validierung."
-    columns:
-      - name: transaction_id
-        description: "ID der gültigen Transaktion."
-        data_tests:
-          - not_null
-          - unique
-
-      - name: currency
-        description: "Währung der gültigen Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['EUR']
-
-      - name: status
-        description: "Status der gültigen Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['available']
-
-      - name: validation_status
-        description: "Validierungsstatus der Transaktion."
-        data_tests:
-          - accepted_values:
-              arguments:
-                values: ['valid']
-
-
-  - name: dbt_validation_summary
-    description: "Zusammenfassung des dbt-Validierungslaufs."
-    columns:
-      - name: validation_date
-        description: "Datum des Validierungslaufs."
-        data_tests:
-          - not_null
-
-      - name: total_payment_records
-        description: "Anzahl der Payment-Provider-Datensätze."
-        data_tests:
-          - not_null
-
-      - name: total_bank_records
-        description: "Anzahl der Bankdatensätze."
-        data_tests:
-          - not_null
-
-      - name: total_validation_errors
-        description: "Anzahl der erkannten Validierungsfehler."
-        data_tests:
-          - not_null
+- name: dbt_stg_payment_transactions
+  description: One row per imported provider CSV row, including deliberate duplicates and invalid inputs.
+    Renames fields, normalises currency to uppercase, and converts integer minor-unit amounts to major
+    units by dividing by 100. These are EUR for EUR rows and USD for USD rows; no exchange-rate conversion
+    occurs. A staging row is prepared for comparison, not certified as valid. The pipeline currently uses
+    a synthetic Stripe-style CSV, not live API data.
+  columns:
+  - name: transaction_id
+    description: Provider identifier copied from provider_transaction_id. Deliberate duplicate IDs remain
+      in staging; the not-null test checks presence, not uniqueness.
+    data_tests:
+    - not_null
+  - name: transaction_date
+    description: Provider date copied from created. It is not the bank booking date or the import date.
+  - name: currency
+    description: Uppercase source currency. EUR and USD are allowed in the fixture staging test; a USD
+      row is nevertheless flagged by the EUR-only business validation.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - EUR
+          - USD
+  - name: amount_gross
+    description: 'Provider gross amount in the currency major unit: raw amount / 100.0. Missing values
+      remain NULL.'
+  - name: fee_amount
+    description: 'Provider fee in the currency major unit: raw fee / 100.0. It is not a separately matched
+      bank booking. The current business rules do not validate fee completeness or gross minus fee equals
+      net.'
+  - name: amount_net
+    description: 'Provider net amount in the currency major unit: raw net / 100.0. Compared with bank_amount
+      using an absolute tolerance of 0.01.'
+  - name: status
+    description: Provider balance status. Available means available at the provider, not proof of a bank
+      payout; pending is excluded from the scenario valid results.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - available
+          - pending
+  - name: transaction_type
+    description: Provider transaction type copied from type. Charge is a payment; refund is a reimbursement.
+      This describes the kind of transaction, independently of its status.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - charge
+          - refund
+  - name: reporting_category
+    description: Provider reporting label copied unchanged. It is retained as context and is not used
+      by the current validity conditions.
+  - name: source_system
+    description: Constant stripe_sample_csv identifying the ingestion source. This is different from the
+      individual charge/refund reference.
+  - name: provider_source_reference
+    description: Original source field, such as a charge or refund reference. Retained for context; matching
+      uses transaction_id instead.
+  - name: imported_at
+    description: Raw-table insertion timestamp retained unchanged. It changes when the full CSV snapshot
+      is reloaded; it is not a durable transaction event timestamp.
+- name: dbt_stg_bank_transactions
+  description: One row per imported bank CSV row. Retains the original booking/reference fields, extracts
+    the first txn_ or pp_ identifier followed by digits from reference_text, and uppercases the currency.
+    Amounts are already in major units, so no division by 100 is applied. The name matched_transaction_id
+    means a candidate matching reference; extraction alone does not prove that a provider payment exists.
+  columns:
+  - name: bank_transaction_id
+    description: Bank booking identifier. The fixture tests require a present, unique ID; this is separate
+      from the extracted provider identifier.
+    data_tests:
+    - not_null
+    - unique
+  - name: booking_date
+    description: Date of the bank booking. It may differ from the provider transaction_date; the current
+      matching rules do not compare these dates.
+  - name: reference_text
+    description: Original bank booking reference text, preserved without replacement. SQL substring extraction
+      reads this text to obtain the candidate provider ID.
+  - name: matched_transaction_id
+    description: First identifier matching (txn_[0-9]+|pp_[0-9]+) in reference_text; NULL if none can
+      be extracted. Compared with the provider transaction_id. A non-NULL value may still have no matching
+      provider record.
+  - name: bank_amount
+    description: Raw bank amount copied unchanged from numeric(12,2), already in major units. Compared
+      with the provider amount_net; the current fixture uses EUR.
+  - name: currency
+    description: Uppercase bank currency. The current fixture test accepts EUR only; the valid SQL view
+      does not separately compare the two source currencies.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - EUR
+  - name: counterparty
+    description: Bank counterparty text retained as context. It is not part of the current matching or
+      validity conditions.
+  - name: imported_at
+    description: Raw-table insertion timestamp retained unchanged. Re-importing the snapshot produces
+      a new insertion timestamp.
+- name: dbt_invalid_transactions
+  description: One row per emitted validation finding, not one row per distinct payment. Nine SQL rule
+    branches are combined with UNION ALL. Duplicate source rows and multiple findings for one ID are retained.
+    Payment rules flag duplicates, missing gross/net amounts, non-EUR currency, pending status, refunds,
+    net/bank differences greater than 0.01, and missing bank matches for available charges. Bank rules
+    flag extracted IDs with no provider record and references without an extractable ID. Pending and refund
+    flags are scenario classifications, not evidence of an inherently incorrect real payment. This normal
+    view evaluates the current raw data; it is not a persistent error audit log.
+  columns:
+  - name: transaction_id
+    description: Affected provider ID for payment findings; extracted provider ID for unmatched bank findings;
+      bank_transaction_id for an unextractable reference. Interpret together with record_source and error_code.
+      Multiple rows may share the same value.
+    data_tests:
+    - not_null
+  - name: record_source
+    description: 'Origin of the finding: payment_provider or bank_export. Used to separate payment findings
+      from bank-only findings.'
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - payment_provider
+          - bank_export
+  - name: error_code
+    description: 'Rule identifier: duplicate_transaction_id, missing_amount, invalid_currency, pending_transaction,
+      refund_transaction, amount_mismatch, missing_bank_match, unmatched_bank_transaction, or bank_reference_id_not_extractable.'
+    data_tests:
+    - not_null
+    - accepted_values:
+        arguments:
+          values:
+          - amount_mismatch
+          - bank_reference_id_not_extractable
+          - duplicate_transaction_id
+          - invalid_currency
+          - missing_amount
+          - missing_bank_match
+          - pending_transaction
+          - refund_transaction
+          - unmatched_bank_transaction
+  - name: error_description
+    description: Human-readable German explanation supplied by the SQL rule. Stored in the view definition;
+      not a Python exception or import failure message.
+  - name: error_field
+    description: Field or field pair involved in the finding, such as amount_net / bank_amount. This is
+      descriptive text, not a separate schema relationship.
+  - name: detected_at
+    description: CURRENT_TIMESTAMP when PostgreSQL evaluates the view, using the current transaction start
+      time. It is not the timestamp of a permanently saved finding.
+- name: dbt_valid_transactions
+  description: One row per qualifying provider/bank join result. Requires an ID match, provider EUR currency,
+    non-NULL gross and net amounts, available status, charge type, a net/bank absolute difference <= 0.01,
+    and no payment-provider finding for the same ID. The uniqueness test guards the intended one-row-per-payment
+    output; a join can otherwise multiply rows when bank references repeat. Valid means valid under these
+    prototype conditions, not proof of settlement, accounting completeness, or a complete production reconciliation.
+  columns:
+  - name: transaction_id
+    description: Provider payment ID in the qualifying result. Required to be present and unique by output
+      tests.
+    data_tests:
+    - not_null
+    - unique
+  - name: transaction_date
+    description: Provider transaction date copied from payment staging, not the bank booking date.
+  - name: amount_gross
+    description: Provider gross amount in EUR major units. Required to be non-NULL by the valid SQL conditions.
+  - name: fee_amount
+    description: Provider fee in EUR major units, retained for context. The current valid conditions do
+      not independently check this fee.
+  - name: amount_net
+    description: Provider net amount in EUR major units. Its absolute difference from bank_amount must
+      be <= 0.01.
+  - name: bank_amount
+    description: Amount from the bank row with the matching extracted provider ID. Already in major units.
+  - name: currency
+    description: Provider currency; valid results require EUR. The bank staging accepted-values test separately
+      checks EUR in the fixture.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - EUR
+  - name: status
+    description: Provider status; valid results require available. This alone does not establish that
+      funds reached the bank.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - available
+  - name: validation_status
+    description: Constant valid labelling rows that satisfy the prototype conditions.
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - valid
+- name: dbt_validation_summary
+  description: One aggregate row for the currently loaded snapshot. Counts source rows, valid result rows,
+    distinct flagged payment IDs, and emitted findings across both sources. Individual error counters
+    count finding rows, not distinct IDs. This normal PostgreSQL view is recalculated when queried and
+    does not store past pipeline runs. The fixed-fixture test checks the supplied 50-payment/40-bank scenario;
+    nine business rules are different from the 28 dbt tests across the project.
+  columns:
+  - name: validation_date
+    description: CURRENT_DATE at query time under the PostgreSQL session date/time settings. It is not
+      a persisted pipeline run date.
+    data_tests:
+    - not_null
+  - name: total_payment_records
+    description: 'Number of rows in payment staging, including deliberate duplicates. Expected fixture
+      value: 50.'
+    data_tests:
+    - not_null
+  - name: total_bank_records
+    description: 'Number of rows in bank staging. Expected fixture value: 40.'
+    data_tests:
+    - not_null
+  - name: valid_records
+    description: 'Number of rows in the valid result view. Expected fixture value: 20.'
+  - name: invalid_payment_transactions
+    description: 'Number of distinct IDs with at least one payment_provider finding. Expected fixture
+      value: 25. Bank-only findings are excluded.'
+  - name: total_validation_errors
+    description: 'Number of finding rows across payment_provider and bank_export, including multiple findings
+      per ID. Expected fixture value: 46.'
+    data_tests:
+    - not_null
+  - name: duplicate_errors
+    description: 'Number of duplicate_transaction_id finding rows, emitted for every affected source row.
+      Expected fixture: 10 rows involving 5 distinct payment IDs.'
+  - name: missing_value_errors
+    description: 'Number of missing_amount findings for NULL gross or net amounts. Expected fixture value:
+      3. This is not a check of every nullable column.'
+  - name: currency_errors
+    description: 'Number of invalid_currency payment findings. Expected fixture value: 3. SQL <> does
+      not flag NULL currencies.'
+  - name: amount_mismatch_errors
+    description: 'Number of amount_mismatch findings from matching provider/bank pairs with absolute net
+      difference > 0.01. Expected fixture value: 5.'
+  - name: unmatched_bank_transactions
+    description: 'Number of unmatched_bank_transaction findings: a bank reference yields an ID, but no
+      provider record has that ID. Expected fixture value: 8.'
+  - name: bank_reference_id_not_extractable_errors
+    description: 'Number of bank_reference_id_not_extractable findings: no supported provider ID can be
+      extracted from the bank reference. Expected fixture value: 2.'

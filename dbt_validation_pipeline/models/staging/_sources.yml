@@ -1,11 +1,63 @@
 version: 2
-
 sources:
-  - name: raw_data
-    database: "{{ target.database }}"
-    schema: public
-    tables:
-      - name: raw_payment_transactions
-        description: "Rohdatentabelle mit importierten Payment-Provider-Transaktionen."
-      - name: raw_bank_transactions
-        description: "Rohdatentabelle mit importierten Bankexport-Daten."
+- name: raw_data
+  database: '{{ target.database }}'
+  schema: public
+  tables:
+  - name: raw_payment_transactions
+    description: One row per synthetic Stripe-style payment CSV row, stored before dbt preparation. Amount,
+      fee and net are integer minor units. No provider-ID primary key is enforced because intentional
+      duplicates must reach validation.
+    columns:
+    - name: provider_transaction_id
+      description: Original provider transaction identifier; intentionally duplicated for five IDs in
+        the fixture.
+    - name: created
+      description: Provider transaction date loaded from the CSV.
+    - name: currency
+      description: Original currency code before uppercase normalisation. Includes deliberate EUR/USD
+        cases.
+    - name: amount
+      description: Gross amount in integer minor units, e.g. 5100 represents 51.00 EUR for an EUR row.
+        Missing values load as NULL.
+    - name: fee
+      description: Fee in integer minor units. Converted to major units in payment staging.
+    - name: net
+      description: Net amount in integer minor units. Converted to major units before comparison with
+        bank amounts.
+    - name: status
+      description: Original provider balance status, available or pending in the fixture.
+    - name: type
+      description: Original provider transaction type, charge or refund in the fixture.
+    - name: reporting_category
+      description: Original provider reporting category, retained as context.
+    - name: source
+      description: Individual provider charge/refund source reference; not the ingestion source_system.
+    - name: imported_at
+      description: PostgreSQL insertion timestamp defaulting to CURRENT_TIMESTAMP; changes on full replacement
+        loads.
+  - name: raw_bank_transactions
+    description: One row per bank CSV booking, stored before dbt preparation. Amount is numeric(12,2)
+      in major units. Original reference text is retained so staging can extract a candidate provider
+      transaction ID.
+    columns:
+    - name: bank_transaction_id
+      description: Original bank booking identifier, separate from the provider transaction identifier.
+    - name: booking_date
+      description: Bank booking date loaded from the CSV.
+    - name: reference_text
+      description: Original booking reference. May contain a supported provider ID, an unknown ID, or
+        no extractable ID.
+    - name: amount
+      description: Bank amount as numeric(12,2), already in major units; not divided by 100.
+    - name: currency
+      description: Original bank currency code; the supplied fixture contains EUR.
+    - name: counterparty
+      description: Original bank counterparty text, retained for context.
+    - name: imported_at
+      description: PostgreSQL insertion timestamp defaulting to CURRENT_TIMESTAMP; changes on full replacement
+        loads.
+  description: Raw CSV tables loaded by the Python importers into the selected PostgreSQL database. Each
+    importer replaces its complete snapshot in its own transaction and records the attempt in import_runs.
+    Synthetic fixture errors and duplicates are deliberately preserved. The optional Stripe API table
+    and import_runs are outside the two dbt sources.
