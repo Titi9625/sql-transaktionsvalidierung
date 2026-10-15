@@ -2,88 +2,66 @@
 
 [![Data pipeline checks](https://github.com/Titi9625/sql-transaktionsvalidierung/actions/workflows/data-pipeline.yml/badge.svg?branch=main)](https://github.com/Titi9625/sql-transaktionsvalidierung/actions/workflows/data-pipeline.yml)
 
-Eine ELT-Pipeline zum Abgleich von Payment-Provider-Daten und Bankbuchungen.
-Python importiert zwei synthetische CSV-Dateien. PostgreSQL und dbt bereiten die
-Daten auf, wenden neun fachliche Prüfregeln an und liefern gültige Transaktionen,
-Fehlerzeilen, eine Zusammenfassung und einen täglichen Reporting-Mart.
+Eine ELT-Pipeline zum Abgleich synthetischer Payment-Provider- und Bankdaten.
+Python prüft und lädt CSV-Paare. PostgreSQL und dbt bereiten die Daten auf,
+wenden neun fachliche Prüfregeln an und erzeugen gültige Zahlungen,
+Prüfmeldungen und tägliche Kennzahlen.
 
-Das Projekt entstand als Bachelorarbeit an der HTW Berlin und wird als Portfolio
-weiterentwickelt. Der CSV-Pfad ist die ausführbare Hauptpipeline. Der enthaltene
-Stripe-Test-API-Import ist ein separater Proof of Concept und fließt nicht in diese
-Validierung ein.
+Aus einer Bachelorarbeit an der HTW Berlin weiterentwickelt: Die Portfolio-Version
+erkennt bereits geladene Dateipaare, erhält frühere Rohdaten und speichert
+erfolgreiche Validierungsergebnisse unter eigenen Lauf-IDs.
+Der optionale Stripe-Test-API-Import bleibt ein separater Proof of Concept;
+er speist diese CSV-Pipeline nicht.
 
 ## Technischer Schwerpunkt
 
 | Bereich | Umsetzung |
 |---|---|
-| Data Engineering | Python-Importe, explizite Datenbanktransaktionen, Importprotokoll, Rollback und ein Pipeline-Runner |
-| Analytics Engineering | Sechs dbt-Views, Abhängigkeiten über `source()` und `ref()`, neun Prüfregeln, tägliche Kennzahlen und 28 dbt-Datentests |
-| Qualitätssicherung | Zwei Python-Integrationstests für Rollback/Fehlerprotokollierung und zwei Unit-Tests für den Runner |
-| Automatisierung | GitHub-Actions-Workflow mit separatem PostgreSQL-Testdienst und zwei vollständigen Pipeline-Läufen |
+| Data Engineering | CSV-Vertrag, SHA-256-Dateipaar-Erkennung, atomare Beladung beider Quellen, Rohdatenhistorie und Pipeline-Runner |
+| Analytics Engineering | Sechs dbt-Views, neun Prüfregeln, dokumentierte Modelle und täglicher Reporting-Mart |
+| Nachvollziehbarkeit | Batch-ID je Eingabepaar, eigene Validierungslauf-ID, gespeicherte Ergebnisse, Code-Fingerprint und dbt-Laufmetadaten |
+| Tests | 61 Python-Tests; 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
+| CI | GitHub Actions mit PostgreSQL 18, ursprünglicher Pipeline, Batch-Wiederholung, aktualisiertem Snapshot und fehlerhafter Datei |
 
-Den Status des aktuellen `main` zeigen das CI-Badge und
-[GitHub Actions](https://github.com/Titi9625/sql-transaktionsvalidierung/actions).
+Das Badge zeigt den Stand von `main`. Den tatsächlichen Status eines Branches
+oder Pull Requests zeigt [GitHub Actions](https://github.com/Titi9625/sql-transaktionsvalidierung/actions).
 
 ## Datenfluss
 
 ```mermaid
 flowchart LR
-    P[Payment-CSV] --> IP[Python-Import]
-    B[Bank-CSV] --> IB[Python-Import]
-    IP --> RP[(raw_payment_transactions)]
-    IB --> RB[(raw_bank_transactions)]
-    IP --> L[(import_runs)]
-    IB --> L
-    RP --> SP[dbt_stg_payment_transactions]
-    RB --> SB[dbt_stg_bank_transactions]
-    SP --> I[dbt_invalid_transactions]
-    SB --> I
-    SP --> V[dbt_valid_transactions]
-    SB --> V
-    I --> V
-    SP --> S[dbt_validation_summary]
-    SB --> S
-    I --> S
-    V --> S
-    SP --> M[mart_daily_reconciliation]
-    I --> M
-    V --> M
+    P[Payment-CSV und Bank-CSV] --> C[Format pruefen und Dateipaar identifizieren]
+    C --> R[(ingestion_batches)]
+    C --> H[(raw_payment_history und raw_bank_history)]
+    H --> S[Zwei Staging-Views fuer eine Batch-ID]
+    S --> V[Validierung: gueltig und Pruefmeldungen]
+    V --> M[Zusammenfassung und Tagesreport]
+    M --> T[dbt-Tests erfolgreich]
+    T --> E[(Gespeicherte Ergebnisse je validation_run_id)]
 ```
 
-Die sechs dbt-Modelle werden als normale PostgreSQL-Views angelegt. Die Views
-speichern Abfragelogik; die Zusammenfassung ist keine historische Ergebnistabelle.
-`import_runs` speichert dagegen den Verlauf der Importversuche dauerhaft.
+Ein **Batch** bezeichnet ein vollständiges Eingabepaar. Die Erkennung verwendet
+die Bytes beider Dateien, ihre Rollen und die Vertragsversion. Umbenennen
+ändert die Identität nicht; veränderte Bytes oder eine andere Partnerdatei schon.
+Ein neuer Batch ist ein vollständiger Snapshot, kein zeilenweises Update.
 
-## Erwartete Ergebnisse des mitgelieferten Testdatensatzes
+Beide Rohdatenquellen werden gemeinsam committed. Wiederholte Eingaben erzeugen
+keine zusätzlichen Rohzeilen. Absichtliche Duplikate innerhalb einer Datei bleiben
+erhalten und werden innerhalb des ausgewählten Batches geprüft.
 
-| Kennzahl | Erwarteter Wert |
-|---|---:|
-| Payment-Datensätze | 50 |
-| Bank-Datensätze | 40 |
-| Gültige Ergebniszeilen | 20 |
-| Unterschiedliche Payment-IDs mit mindestens einem Fehler | 25 |
-| Fehlerzeilen insgesamt, über beide Quellen | 46 |
-| dbt-Views / dbt-Datentests | 6 / 28 |
-
-Eine Transaktion kann mehrere Fehler erzeugen. 46 Fehlerzeilen bedeuten daher
-nicht 46 unterschiedliche Transaktionen. Die Daten enthalten absichtliche
-Duplikate und andere Fehler; diese sollen erkannt und nicht vorab entfernt werden.
-Die festen Erwartungswerte stehen in
-[`assert_dbt_validation_summary_expected_values.sql`](dbt_validation_pipeline/tests/assert_dbt_validation_summary_expected_values.sql).
-
-Historische Screenshots aus der Thesis:
-
-<p>
-  <img src="ergebnisse/screenshots/dbt_validation_summary1.png" width="420" alt="Zusammenfassung des Thesis-Testdatensatzes" />
-  <img src="ergebnisse/screenshots/dbt_error_code_counts.png" width="420" alt="Fehlerzeilen je Fehlerart im Thesis-Testdatensatz" />
-</p>
+Die sechs dbt-Modelle sind normale Views: Sie speichern Abfragelogik.
+`batch_validation` enthält die Views für den zuletzt ausgewählten Batch.
+Nach erfolgreichem `dbt build` kopiert Python die Ergebnisse in dauerhafte
+`public.validation_*`-Tabellen. Ein neuer Validierungslauf überschreibt frühere
+Ergebnisse nicht. Batch-ID und Validierungslauf-ID haben unterschiedliche Aufgaben:
+**gleiche Eingabe, mehrere Validierungsläufe** ist ausdrücklich möglich.
 
 ## Lokal starten: Windows / PowerShell
 
-Voraussetzungen: Git, Python 3.13 und ein laufender PostgreSQL-18-Server.
-Die Python-Paketversionen sind in [`requirements.txt`](requirements.txt) festgelegt.
+Voraussetzungen: Git, Python 3.13 und PostgreSQL 18.
+Die Paketversionen stehen in [requirements.txt](requirements.txt).
 
-### 1. Repository und Python-Umgebung
+### 1. Repository und Umgebung
 
 ```powershell
 git clone https://github.com/Titi9625/sql-transaktionsvalidierung.git
@@ -92,205 +70,193 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Ein neuer Clone startet auf `main`, wo die Portfolio-Erweiterungen verfügbar
-sind. Bei einer vorhandenen Arbeitskopie nicht erneut klonen.
+Bei vorhandener Arbeitskopie nicht erneut klonen. Bei einem Feature-Branch zuerst
+prüfen, ob dessen Änderungen bereits in `main` verfügbar sind.
 
 ### 2. Datenbank und Einstellungen
 
 In pgAdmin eine separate Datenbank `portfolio_validation` anlegen.
-Dann im Repository-Stammordner:
+Nur bei der Ersteinrichtung:
 
 ```powershell
 Copy-Item .env.example .env
 notepad .env
 ```
 
-Nur bei der Ersteinrichtung kopieren; eine vorhandene `.env` nicht überschreiben.
-Host, Port, Benutzer und Passwort passend zum lokalen PostgreSQL-Server eintragen.
-`DB_NAME=portfolio_validation` verwenden. Ein Stripe-Schlüssel ist nicht nötig.
-`.env` enthält lokale Zugangsdaten und wird von Git ignoriert.
+Eine vorhandene `.env` nicht überschreiben. Host, Port, Benutzer und Passwort
+eintragen; `DB_NAME=portfolio_validation` verwenden. Kein Stripe-Schlüssel nötig.
+`.env` und die lokale dbt-`profiles.yml` sind von Git ausgeschlossen.
+Die Runner erzeugen temporäre dbt-Profile aus `.env`; keine zusätzliche manuelle
+Profilkonfiguration nötig. Die Batch-Pipeline erstellt ihre Tabellen selbst.
+Für den lokalen Aufbau einen Benutzer mit Rechten zum Anlegen von Tabellen,
+Indizes und Views verwenden; die ursprünglichen SQL-Skripte verwenden `postgres`.
 
-Im Query Tool von **portfolio_validation** diese Dateien nacheinander öffnen und
-ausführen:
-
-1. [`sql_views/00_create_raw_tables.sql`](sql_views/00_create_raw_tables.sql)
-2. [`sql_views/04_create_import_runs.sql`](sql_views/04_create_import_runs.sql)
-
-Das vorhandene Rohdaten-Skript weist die Tabellen dem Benutzer `postgres` zu;
-für diesen lokalen Aufbau als `postgres` ausführen. Eine produktive Installation
-braucht ein angepasstes Rollen- und Rechtekonzept.
-
-### 3. Vollständige Pipeline ausführen
+### 3. Initialen Batch laden, prüfen und Ergebnisse speichern
 
 ```powershell
-.\.venv\Scripts\python.exe .\run_pipeline.py
+.\.venv\Scripts\python.exe .\run_batch_pipeline.py --payment-csv .\testdaten\batch_scenarios\01_initial\payments.csv --bank-csv .\testdaten\batch_scenarios\01_initial\bank.csv --scenario 01_initial
 ```
 
-Der Runner prüft die dbt-Verbindung, lädt beide CSV-Dateien und führt `dbt build`
-aus. Er erzeugt ein temporäres dbt-Profil aus derselben `.env`, die auch die
-Importer verwenden. Eine zusätzliche manuelle `profiles.yml` ist dafür nicht
-nötig. Der temporäre Profilordner wird bei normalem Programmende entfernt.
+Erwartet: 5 Payment-Zeilen, 3 Bankzeilen, 1 gültige Zahlung, 3 markierte
+Payment-IDs und 4 Prüfmeldungen. `PASS=36` bedeutet **6 Modelle + 30 Tests**.
+Die Ausgabe enthält Batch-ID und gespeicherte Validierungslauf-ID.
 
-Erwarteter Abschluss: `PASS=34`, `ERROR=0` und `Pipeline completed successfully.`
-Die 34 erfolgreichen Aufgaben sind **6 Modelle plus 28 Tests**, nicht 34 Tests.
-Die Rückgabe des Runners ist bei Erfolg 0, bei einem fehlgeschlagenen Schritt 1.
+Denselben Befehl erneut ausführen: 0 neue Rohzeilen, gleiche Batch-ID,
+neuer erfolgreicher Validierungslauf mit eigener ID.
 
-### 4. Python-Tests ausführen
-
-Nach einem erfolgreichen Import:
+### 4. Aktualisierten Snapshot laden
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe .\run_batch_pipeline.py --payment-csv .\testdaten\batch_scenarios\02_updated\payments.csv --bank-csv .\testdaten\batch_scenarios\02_updated\bank.csv --scenario 02_updated
 ```
 
-Die Suite enthält vier Tests. Die beiden Integrationstests verlangen ausdrücklich
-`portfolio_validation`, erzeugen kontrollierte Importfehler nach dem ersten
-INSERT und vergleichen die vollständigen Tabelleninhalte vor und nach dem
-Rollback. Sie hinterlassen absichtlich zwei `failed`-Einträge im Importprotokoll.
-Die CSV-Dateien werden dabei nicht verändert. Währenddessen keine anderen
-Importe oder Tests gegen dieselbe Datenbank starten.
+Erwartet: 5/4 Rohzeilen im neuen Batch, 2 gültige Zahlungen, 2 markierte IDs
+und 3 Prüfmeldungen. `txn_102` ist jetzt verfügbar und hat eine passende
+Bankbuchung. Der frühere Pending-Datensatz und sein Ergebnis bleiben erhalten.
+Über beide Batches liegen jetzt 10 Payment- und 7 Bank-Rohzeilen vor.
 
-### 5. Ergebnisse ansehen
+`--scenario` aktiviert feste Erwartungen für die benannten Testdateien und prüft
+deren Fingerprints. Bei eigenen Dateien dieses Argument weglassen. Dann gelten
+weiterhin die generischen Tests sowie die Bereitschafts- und Konsistenzprüfungen;
+die festen Fixture-Erwartungen werden nicht angewandt.
+
+### 5. Fehlerhafte Datei ablehnen
+
+```powershell
+.\.venv\Scripts\python.exe .\run_batch_pipeline.py --payment-csv .\testdaten\batch_scenarios\03_broken_format\payments.csv --bank-csv .\testdaten\batch_scenarios\03_broken_format\bank.csv
+```
+
+Erwartet: Rückgabecode 1 und `No database changes.` Der Bankbetrag
+`NOT_A_NUMBER` ist ein Formatfehler. Bereits geladene Daten und Ergebnisse
+bleiben erhalten. Fehlende Beträge bleiben dagegen `NULL`, damit die fachlichen
+Regeln sie prüfen können; ein fehlender Wert wird nicht zu 0.
+
+### 6. Gespeicherte Ergebnisse ansehen
 
 In pgAdmin, verbunden mit `portfolio_validation`:
 
 ```sql
-SELECT * FROM public.dbt_validation_summary;
+SELECT r.validation_run_id, r.batch_id, r.validated_at,
+       s.total_payment_records, s.total_bank_records,
+       s.valid_records, s.invalid_payment_transactions, s.total_validation_errors
+FROM public.validation_runs r
+JOIN public.validation_summaries s USING (validation_run_id)
+ORDER BY r.validated_at;
 
-SELECT run_id, file_name, target_table, started_at, finished_at,
-       status, rows_imported, error_message
-FROM public.import_runs
-ORDER BY run_id DESC;
+SELECT validation_run_id, transaction_id, error_code, error_description
+FROM public.validation_findings
+ORDER BY validation_run_id, finding_number;
 ```
 
-## Täglicher Reporting-Mart
-
-[`mart_daily_reconciliation.sql`](dbt_validation_pipeline/models/reports/mart_daily_reconciliation.sql)
-beantwortet: **Wie viele unterschiedliche Payment-IDs bestehen die Validierung
-pro Zahlungsdatum und Quelle?** Eine Ergebniszeile steht für ein Datum und ein
-`source_system`. Das Zahlungsdatum stammt vom Provider, nicht von der Bankbuchung.
-
-| Kennzahl, über alle Tage | Testdatensatz | Bedeutung |
-|---|---:|---|
-| `payment_row_count` | 50 | Originalzeilen, einschließlich Duplikaten |
-| `distinct_payment_count` | 45 | Unterschiedliche Payment-IDs |
-| `valid_payment_count` | 20 | IDs aus `dbt_valid_transactions` |
-| `flagged_payment_count` | 25 | IDs mit mindestens einer Payment-Prüfmeldung |
-| `payment_error_row_count` | 36 | Payment-Fehlerzeilen; Bank-Fehlerzeilen ausgeschlossen |
-| `duplicate_payment_id_count` | 5 | IDs mit mehreren Quellzeilen |
-| Validierungsquote | 44,44 % | 20 / 45 × 100 |
-
-Eine ID wird vor der Aggregation einmal zusammengefasst. Dadurch erhöhen weder
-Duplikate noch mehrere Fehler pro ID den Nenner der Quote. `valid_net_amount_eur`
-summiert nur die Provider-Nettobeträge der gültigen EUR-Zahlungen.
-
-Die Quote ist eine **Validierungsquote**, keine reine Matching-Quote: Pending,
-Refunds und andere markierte Fälle bleiben im Nenner. Eine Prüfmeldung bedeutet
-nicht automatisch, dass eine echte Zahlung wirtschaftlich falsch ist. Bank-only
-Fehler bleiben in `dbt_validation_summary` sichtbar, gehören aber nicht zu dieser
-Payment-Auswertung. Aktuell gibt es nur `stripe_sample_csv` als Quellsystem.
-
-Die Tagesquoten nicht mitteln: Für eine Gesamtquote gültige IDs und alle IDs
-jeweils summieren und dann dividieren. Der zusätzliche Konsistenztest prüft
-Klassifikation, Kennzahlen und Gesamtsummen. Fehlende oder widersprüchliche
-Zahlungsdaten für dieselbe ID lassen den Test fehlschlagen.
-
-In pgAdmin:
-
-```sql
-SELECT *
-FROM public.mart_daily_reconciliation
-ORDER BY payment_date, source_system;
-
-SELECT
-    SUM(payment_row_count) AS payment_rows,
-    SUM(distinct_payment_count) AS distinct_payment_ids,
-    SUM(valid_payment_count) AS valid_payment_ids,
-    SUM(flagged_payment_count) AS flagged_payment_ids,
-    SUM(payment_error_row_count) AS payment_error_rows,
-    SUM(duplicate_payment_id_count) AS duplicate_payment_ids,
-    ROUND(100.0 * SUM(valid_payment_count)
-          / NULLIF(SUM(distinct_payment_count), 0), 2) AS validation_pass_rate_pct
-FROM public.mart_daily_reconciliation;
-```
-
-## Verhalten bei Wiederholung und Fehlern
-
-- Jeder CSV-Import ersetzt den Inhalt seiner Rohdatentabelle mit `TRUNCATE` und
-  anschließendem `INSERT`. Wiederholtes Laden hängt keine weiteren Datenzeilen an.
-  Die absichtlichen Duplikate innerhalb der Quelldatei bleiben erhalten.
-- Die fachlichen Quelldaten bleiben bei gleicher Eingabe gleich; `imported_at`
-  und die neuen Protokolleinträge ändern sich. Es gibt noch keine Erkennung bereits
-  geladener Dateien über Hashes oder Batch-IDs und keine inkrementelle Beladung.
-- Vor dem Import wird ein `running`-Eintrag gespeichert. Daten und `success`-Update
-  werden gemeinsam committed. Bei einem abgefangenen Fehler werden die Daten
-  zurückgerollt und ein `failed`-Eintrag mit 0 committed Zeilen gespeichert.
-- Das Fehlerfeld enthält den Exception-Typ, nicht den vollständigen Fehlertext.
-  Ein Verbindungsfehler vor Beginn kann nicht in derselben Datenbank protokolliert
-  werden. Ein Prozessabbruch oder Verbindungsverlust kann `running` zurücklassen.
-- Payment- und Bank-Import sind getrennte Transaktionen. Ein späterer Fehler macht
-  einen vorher erfolgreichen Import nicht rückgängig. Der Runner stoppt dann;
-  die Pipeline ist keine gemeinsame Transaktion über alle Schritte.
-- dbt verwendet im Runner einen Thread. Bei parallelem Ersetzen abhängiger Views
-  trat lokal ein Deadlock auf; anschließende sequenzielle Wiederholungen waren
-  erfolgreich. Mehrere Pipeline-Prozesse gegen dieselbe Datenbank werden noch
-  nicht durch eine übergreifende Sperre verhindert.
-
-## Automatische Prüfung auf GitHub
-
-[`data-pipeline.yml`](.github/workflows/data-pipeline.yml) ist für Pushes auf
-`main`, `portfolio-improvements` und `analytics-reporting`, Pull Requests nach `main` und manuelle Starts
-konfiguriert. Der Job nutzt einen frischen PostgreSQL-18-Service, installiert
-die Projektabhängigkeiten, erstellt Tabellen und eine CI-eigene `.env`, führt
-die Pipeline zweimal aus und startet anschließend die vier Python-Tests.
-
-Die im Workflow angegebenen Zugangsdaten gelten nur für den kurzlebigen
-Testdienst. Die lokale Datenbank und persönliche Zugangsdaten werden nicht
-verwendet. Ein erfolgreicher Lauf zeigt Reproduzierbarkeit in dieser
-Testumgebung; er belegt keinen produktiven Betrieb.
-
-Grundlage für den Testdienst:
-[GitHub-Dokumentation zu PostgreSQL-Service-Containern](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers).
-
-## Wichtige Dateien
-
-| Pfad | Aufgabe |
+| Tabelle | Inhalt |
 |---|---|
-| `run_pipeline.py` | Aktueller Einstiegspunkt für Importe und dbt |
-| `python_import/import_*_csv_large.py` | Aktuelle CSV-Importer mit Transaktionen und Protokollierung |
-| `python_import/import_logging.py` | Start, Erfolg und Fehler eines Importversuchs speichern |
-| `sql_views/00_create_raw_tables.sql` | Drei Rohdatentabellen anlegen; API-Tabelle bleibt im CSV-Pfad leer |
-| `sql_views/04_create_import_runs.sql` | Importprotokoll anlegen |
-| `dbt_validation_pipeline/models/` | Zwei Staging-, zwei Validierungs-, ein Zusammenfassungs- und ein Reporting-Modell |
-| `dbt_validation_pipeline/models/_schema.yml` | Generische dbt-Tests |
-| `dbt_validation_pipeline/models/reports/_reporting.yml` | Definitionen der Reporting-Spalten und fünf generische Tests |
-| `dbt_validation_pipeline/tests/` | Drei projektspezifische SQL-Tests, einschließlich Reporting-Konsistenz |
-| `tests/` | Python-Tests für Rollback/Logging und Runner |
-| `testdaten/` | Mitgelieferte synthetische CSV-Daten |
-| `.github/workflows/data-pipeline.yml` | CI-Konfiguration |
-| `ergebnisse/screenshots/` | Historische Nachweise aus der Thesis |
+| `ingestion_batches` | Dateipaar-Fingerprints, Eingabegrößen und Ladestatus |
+| `raw_payment_history`, `raw_bank_history` | Quellzeilen mit Batch-ID und Quellzeilennummer |
+| `validation_runs` | Lauf-ID, Batch-ID, Code-Fingerprint, Git-Stand falls verfügbar und dbt-Metadaten |
+| `validation_summaries` | Zusammenfassung eines erfolgreichen Laufs |
+| `validation_valid_payments` | Gültige Zahlungen je Lauf |
+| `validation_findings` | Alle Prüfmeldungen je Lauf, einschließlich mehrfacher Meldungen |
+| `validation_daily_reports` | Tageskennzahlen je Lauf |
 
-Die kleinen CSV-Importer, der Generator, das bisherige PowerShell-Skript und der
-Stripe-API-Code sind historisches Thesis-Material und werden vom neuen Runner
-nicht aufgerufen. Sie können noch Pfade zur ursprünglichen Ordnerstruktur enthalten.
-Die eigenständigen SQL-Views in `sql_views/01_...` und `02_...` sind ebenfalls eine
-separate Umsetzung. Ihre Regeln sind nicht vollständig identisch mit den
-dbt-Modellen; sie werden für den hier dokumentierten Ablauf nicht ausgeführt.
+## Neun fachliche Prüfregeln
 
-## Grenzen und nächste Schritte
+Implementiert in [dbt_invalid_transactions.sql](dbt_validation_pipeline/models/validation/dbt_invalid_transactions.sql).
 
-- Kleine, synthetische Testdaten; kein Nachweis für produktive Zahlungsabwicklung,
-  große Datenmengen oder beliebige Bankformate.
-- Referenzbasierter Einzelabgleich; keine vollständige Modellierung von
-  Sammelauszahlungen, Auszahlungszyklen oder Währungsumrechnungen.
-- Pending-Zahlungen und Refunds sind fachliche Ausnahmen im gewählten Szenario;
-  sie sind nicht automatisch fehlerhafte reale Zahlungen.
-- Die neun Prüfregeln und festen Ergebnis-Tests decken das Testszenario ab;
-  weitere Nullwerte, Statuswerte und Randfälle benötigen zusätzliche Regeln/Tests.
-- Der Reporting-Mart zeigt den aktuell geladenen Datenbestand; er speichert keine
-  historischen Pipeline-Stände. Kein Scheduler und kein Dashboard. Nächste Schritte
-  sind vollständige dbt-Dokumentation und eine veröffentlichte Modellübersicht.
+| Fehlercode | Auslöser |
+|---|---|
+| `duplicate_transaction_id` | Mehrere Provider-Zeilen mit derselben nicht-leeren ID |
+| `missing_amount` | Provider-Brutto- oder Nettobetrag fehlt |
+| `invalid_currency` | Vorhandene Provider-Währung ist nicht EUR |
+| `pending_transaction` | Provider-Status ist pending |
+| `refund_transaction` | Transaktionstyp ist refund |
+| `amount_mismatch` | Passende Provider-/Bankbeträge unterscheiden sich um mehr als 0,01 |
+| `missing_bank_match` | Verfügbare Charge ohne passende Bankreferenz |
+| `unmatched_bank_transaction` | Extrahierte Bankreferenz-ID hat keinen Provider-Datensatz |
+| `bank_reference_id_not_extractable` | Keine unterstützte ID aus Bankreferenz extrahierbar |
+
+Eine Zahlung kann mehrere Meldungen erzeugen. Prüfmeldungen sind nicht die Zahl
+unterschiedlicher Zahlungen. Pending und Refund sind Ausnahmen dieses Szenarios,
+nicht automatisch wirtschaftlich falsche Zahlungen. `available` bedeutet nicht,
+dass Geld bereits auf dem Bankkonto eingegangen ist.
+
+Der [Reporting-Mart](dbt_validation_pipeline/models/reports/mart_daily_reconciliation.sql)
+gruppiert unterschiedliche Payment-IDs je Provider-Datum und Quelle. Die
+Validierungsquote ist gültige IDs / unterschiedliche IDs; Bank-only-Meldungen
+zählen nicht zu diesem Payment-Mart. Gesamtquoten aus summierten Zählern und
+Nennern berechnen, Tagesprozente nicht mitteln.
+
+## Ursprüngliche Pipeline und Regressionstests
+
+`run_pipeline.py` bleibt für die ursprünglichen 50 Payment- und 40 Bankzeilen
+erhalten. In pgAdmin zuerst `sql_views/00_create_raw_tables.sql` und
+`sql_views/04_create_import_runs.sql` in `portfolio_validation` ausführen, dann:
+
+```powershell
+.\.venv\Scripts\python.exe .\run_pipeline.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Ursprünglicher Modus: Views in `public`, 20 gültige Ergebnisse, 25 markierte
+Payment-IDs, 46 Meldungen; `PASS=34` = 6 Modelle + 28 Tests.
+Die ursprünglichen Importer ersetzen ihre Rohdatentabellen getrennt mit
+`TRUNCATE`/`INSERT` und protokollieren in `import_runs`. Sie verändern die
+neuen Batch-Historientabellen nicht.
+
+Die Python-Suite enthält 61 Tests. Zwei ursprüngliche Integrationstests prüfen
+Rollback und Fehlerprotokollierung in PostgreSQL. Weitere Tests prüfen Parser,
+Fingerprints, Batch-Isolation, gespeicherte Ergebnisse und Runner-Verhalten;
+ihre Datenbankadapter verwenden SQLite. Sie beweisen keine PostgreSQL-Sperr-
+oder Nebenläufigkeitseigenschaften. Die PostgreSQL-Integrationstests erfordern
+die ursprünglichen Tabellen und `import_runs` sowie `DB_NAME=portfolio_validation`.
+Keine parallelen Importe während dieser Tests starten.
+
+Der [CI-Workflow](.github/workflows/data-pipeline.yml) führt die ursprüngliche
+Pipeline zweimal aus und validiert initialen, wiederholten und aktualisierten
+Batch. [verify_batch_history.py](tests/verify_batch_history.py) kontrolliert im
+frischen PostgreSQL-Testdienst gespeicherte Ergebnisse, Rohdatenmengen und die
+Ablehnung fehlerhafter Eingaben ohne Änderungen. Dieser spezielle Prüfer läuft
+nur in GitHub Actions, da er einen frischen Datenbestand voraussetzt.
+Lokale Zugangsdaten werden nicht für CI verwendet.
+
+## Fehlerverhalten und Grenzen
+
+- Fehler beim Laden rollen beide Quellen dieses Batches zurück. Frühere Batches
+  bleiben bestehen. `ready` bedeutet vollständig geladen, nicht fachlich gültig.
+- Beladung, dbt-Aufbau und Ergebnisspeicherung sind getrennte Transaktionen.
+  Schlägt die Validierung fehl, bleibt der geladene Batch für einen neuen Versuch
+  erhalten. Eine erfolgreiche Ergebniskopie wird vollständig committed oder
+  zurückgerollt; vorherige Ergebnisläufe werden nicht überschrieben.
+- Ein PostgreSQL-Advisory-Lock verhindert gleichzeitige Validierungen über diesen
+  Batch-Runner. Direkte dbt-Aufrufe und fremde Schreibzugriffe umgehen diese
+  Koordination. Die Pipeline ist kein verteilter Scheduler.
+- Der Code-Fingerprint umfasst ausgewählte Validierungsdateien, keine vollständige
+  Laufzeitumgebung. Git-Commit und Dirty-Status ergänzen die Herkunft. Historische
+  Tabellen sind durch die Anwendung erhalten, nicht gegen Datenbankadministratoren
+  manipulationssicher geschützt.
+- Kleine synthetische Daten, fester CSV-Vertrag, ein Provider-Quellsystem und
+  referenzbasierter Einzelabgleich. Keine realen Sammelauszahlungen, FX-Umrechnung,
+  zeilenweisen Upserts, Cloud-Ausführung oder Lasttests. Weitere NULL-/Statusfälle
+  benötigen zusätzliche Regeln. Noch kein Dashboard, Scheduler oder Upload-UI.
+
+## Wichtige Einstiegspunkte
+
+| Datei / Verzeichnis | Aufgabe |
+|---|---|
+| `run_batch_pipeline.py` | Dateipaar prüfen, Historie laden, dbt ausführen, Ergebnisse speichern |
+| `check_input_pair.py`, `register_input_pair.py`, `load_input_pair.py` | Einzelne Vorbereitungsschritte separat ausführen |
+| `validate_batch.py` | Ausgewählten Batch validieren und optional Ergebnisse speichern |
+| `python_import/csv_contract.py` | Strikter CSV-Vertrag und verlustfreie Betragskonvertierung |
+| `python_import/batch_registry.py`, `batch_loader.py` | Identität und atomare Beladung |
+| `python_import/result_history.py` | Erfolgreiche Ergebnisse mit Laufmetadaten speichern |
+| `sql_views/05_...`, `06_...`, `07_...` | Batch- und Ergebnishistorien anlegen |
+| `dbt_validation_pipeline/models/`, `macros/`, `tests/` | Modelle, Batch-Auswahl, Dokumentation und SQL-Tests |
+| `testdaten/batch_scenarios/` | Kleine Testszenarien mit exakten Erwartungen |
+| `tests/` | Python-Tests und PostgreSQL-CI-Abnahme |
+
+Historische Thesis-Skripte, eigenständige SQL-Views und API-Code sind keine
+zusätzlichen Schritte des Batch-Runners. Historische Screenshots in
+`ergebnisse/screenshots/` zeigen den ursprünglichen Thesis-Datensatz.
 
 Thesis: *SQL-basierte Validierung von Transaktionsdaten aus Payment-Provider-APIs
-und Bankexporten für eine zuverlässige Finanzberichterstattung*,
-HTW Berlin, Ingenieurinformatik. Lizenz: [MIT](LICENSE).
+und Bankexporten für eine zuverlässige Finanzberichterstattung*, HTW Berlin,
+Ingenieurinformatik. Lizenz: [MIT](LICENSE).

@@ -2,7 +2,7 @@ name: Data pipeline checks
 
 "on":
   push:
-    branches: [main, portfolio-improvements, analytics-reporting]
+    branches: [main, portfolio-improvements, analytics-reporting, batch-ingestion]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -71,7 +71,8 @@ jobs:
           try:
               with connection:
                   with connection.cursor() as cursor:
-                      for name in ("00_create_raw_tables.sql", "04_create_import_runs.sql"):
+                      for name in ("00_create_raw_tables.sql", "04_create_import_runs.sql",
+                                   "05_create_ingestion_batches.sql", "06_create_batch_history.sql"):
                           cursor.execute((Path("sql_views") / name).read_text(encoding="utf-8-sig"))
           finally:
               connection.close()
@@ -83,17 +84,40 @@ jobs:
       - name: Repeat the pipeline against existing data and views
         run: .venv/bin/python run_pipeline.py
 
-      - name: Test rollback, failed-import logging and runner control flow
+      - name: Load and validate the initial batch
+        run: >-
+          .venv/bin/python run_batch_pipeline.py
+          --payment-csv testdaten/batch_scenarios/01_initial/payments.csv
+          --bank-csv testdaten/batch_scenarios/01_initial/bank.csv --scenario 01_initial
+
+      - name: Repeat the same pair without adding raw rows
+        run: >-
+          .venv/bin/python run_batch_pipeline.py
+          --payment-csv testdaten/batch_scenarios/01_initial/payments.csv
+          --bank-csv testdaten/batch_scenarios/01_initial/bank.csv --scenario 01_initial
+
+      - name: Load the updated snapshot while retaining the first
+        run: >-
+          .venv/bin/python run_batch_pipeline.py
+          --payment-csv testdaten/batch_scenarios/02_updated/payments.csv
+          --bank-csv testdaten/batch_scenarios/02_updated/bank.csv --scenario 02_updated
+
+      - name: Check persisted results and reject malformed input without writes
+        run: .venv/bin/python tests/verify_batch_history.py
+
+      - name: Run all Python tests
         run: .venv/bin/python -m unittest discover -s tests -v
 
       - name: Write successful-check summary
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
           ## Data pipeline checks passed
-          - Two complete runs against an isolated PostgreSQL 18 database.
-          - Each run built 6 dbt views and passed 28 dbt data tests.
-          - Fixed-fixture assertions checked 50 payment rows, 40 bank rows, 20 valid results and 46 error rows.
-          - Reporting assertions checked distinct payment counts, classification, dates and aggregation totals.
-          - Four Python tests checked rollback/logging for both importers and runner control flow.
-          - Rollback tests intentionally created two failed import-log entries.
+          - Original pipeline ran twice: 6 views and 28 dbt tests per run.
+          - Three batch validations: 6 views and 30 dbt tests per run.
+          - Repeated input reused its batch; raw history contains 10 payment and 7 bank rows across two batches.
+          - Initial results (1 valid / 4 findings) and updated results (2 valid / 3 findings) remain saved separately.
+          - PostgreSQL acceptance checks verified all saved summaries, valid IDs, findings and report totals.
+          - Malformed bank input failed without changing any batch or saved-result row.
+          - 61 Python tests passed, including two original PostgreSQL importer rollback tests.
+          - Other Python database tests use isolated SQLite adapters; they do not prove PostgreSQL concurrency behaviour.
           EOF

@@ -1,7 +1,8 @@
 version: 2
 models:
 - name: dbt_stg_payment_transactions
-  description: One row per imported provider CSV row, including deliberate duplicates and invalid inputs.
+  description: Reads the original snapshot by default, or one selected history batch when batch_id is
+    configured. One row per imported provider CSV row, including deliberate duplicates and invalid inputs.
     Renames fields, normalises currency to uppercase, and converts integer minor-unit amounts to major
     units by dividing by 100. These are EUR for EUR rows and USD for USD rows; no exchange-rate conversion
     occurs. A staging row is prepared for comparison, not certified as valid. The pipeline currently uses
@@ -62,9 +63,11 @@ models:
       uses transaction_id instead.
   - name: imported_at
     description: Raw-table insertion timestamp retained unchanged. It changes when the full CSV snapshot
-      is reloaded; it is not a durable transaction event timestamp.
+      is reloaded; it is not a durable transaction event timestamp. History-row timestamps remain unchanged
+      on repeat batch loads.
 - name: dbt_stg_bank_transactions
-  description: One row per imported bank CSV row. Retains the original booking/reference fields, extracts
+  description: Reads the original snapshot by default, or one selected history batch when batch_id is
+    configured. One row per imported bank CSV row. Retains the original booking/reference fields, extracts
     the first txn_ or pp_ identifier followed by digits from reference_text, and uppercases the currency.
     Amounts are already in major units, so no division by 100 is applied. The name matched_transaction_id
     means a candidate matching reference; extraction alone does not prove that a provider payment exists.
@@ -101,9 +104,10 @@ models:
       validity conditions.
   - name: imported_at
     description: Raw-table insertion timestamp retained unchanged. Re-importing the snapshot produces
-      a new insertion timestamp.
+      a new insertion timestamp. History-row timestamps remain unchanged on repeat batch loads.
 - name: dbt_invalid_transactions
-  description: One row per emitted validation finding, not one row per distinct payment. Nine SQL rule
+  description: Reads the original snapshot by default, or one selected history batch when batch_id is
+    configured. One row per emitted validation finding, not one row per distinct payment. Nine SQL rule
     branches are combined with UNION ALL. Duplicate source rows and multiple findings for one ID are retained.
     Payment rules flag duplicates, missing gross/net amounts, non-EUR currency, pending status, refunds,
     net/bank differences greater than 0.01, and missing bank matches for available charges. Bank rules
@@ -153,7 +157,8 @@ models:
     description: CURRENT_TIMESTAMP when PostgreSQL evaluates the view, using the current transaction start
       time. It is not the timestamp of a permanently saved finding.
 - name: dbt_valid_transactions
-  description: One row per qualifying provider/bank join result. Requires an ID match, provider EUR currency,
+  description: Reads the original snapshot by default, or one selected history batch when batch_id is
+    configured. One row per qualifying provider/bank join result. Requires an ID match, provider EUR currency,
     non-NULL gross and net amounts, available status, charge type, a net/bank absolute difference <= 0.01,
     and no payment-provider finding for the same ID. The uniqueness test guards the intended one-row-per-payment
     output; a join can otherwise multiply rows when bank references repeat. Valid means valid under these
@@ -201,11 +206,13 @@ models:
           values:
           - valid
 - name: dbt_validation_summary
-  description: One aggregate row for the currently loaded snapshot. Counts source rows, valid result rows,
-    distinct flagged payment IDs, and emitted findings across both sources. Individual error counters
+  description: Reads the original snapshot by default, or one selected history batch when batch_id is
+    configured. One aggregate row for the currently loaded snapshot. Counts source rows, valid result
+    rows, distinct flagged payment IDs, and emitted findings across both sources. Individual error counters
     count finding rows, not distinct IDs. This normal PostgreSQL view is recalculated when queried and
-    does not store past pipeline runs. The fixed-fixture test checks the supplied 50-payment/40-bank scenario;
-    nine business rules are different from the 28 dbt tests across the project.
+    does not store past pipeline runs. Exact expected counts apply to the original fixture or a named
+    batch scenario. Test counts depend on the selected mode; the nine business rules are separate from
+    dbt tests.
   columns:
   - name: validation_date
     description: CURRENT_DATE at query time under the PostgreSQL session date/time settings. It is not

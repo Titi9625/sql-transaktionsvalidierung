@@ -1,0 +1,5 @@
+bank_transaction_id,booking_date,reference_text,amount,currency,counterparty
+bank_101,2026-10-01,STRIPE PAYOUT txn_101,98.00,EUR,Synthetic payment provider
+bank_103,2026-10-01,STRIPE PAYOUT txn_103,19.50,EUR,Synthetic payment provider
+bank_104,2026-10-01,STRIPE PAYOUT txn_104,28.95,EUR,Synthetic payment provider
+bank_102,2026-10-02,STRIPE PAYOUT txn_102,NOT_A_NUMBER,EUR,Synthetic payment provider
