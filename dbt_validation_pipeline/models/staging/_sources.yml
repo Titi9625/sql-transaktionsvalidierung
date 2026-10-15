@@ -57,7 +57,97 @@ sources:
     - name: imported_at
       description: PostgreSQL insertion timestamp defaulting to CURRENT_TIMESTAMP; changes on full replacement
         loads.
-  description: Raw CSV tables loaded by the Python importers into the selected PostgreSQL database. Each
-    importer replaces its complete snapshot in its own transaction and records the attempt in import_runs.
-    Synthetic fixture errors and duplicates are deliberately preserved. The optional Stripe API table
-    and import_runs are outside the two dbt sources.
+  - name: raw_payment_history
+    description: Append-only raw snapshot rows keyed by batch_id and source_row_number. Includes duplicate
+      source IDs. Staging selects one ready batch; other snapshots remain stored.
+    columns:
+    - name: batch_id
+      description: Foreign key to ingestion_batches; identifies the paired source snapshot.
+    - name: source_row_number
+      description: One-based data row number within this source file; distinguishes deliberate duplicate
+        IDs.
+    - name: provider_transaction_id
+      description: Provider ID supplied in this snapshot; deliberate duplicate IDs remain in history.
+    - name: created
+      description: Provider transaction date loaded from the CSV.
+    - name: currency
+      description: Original currency code before uppercase normalisation. Includes deliberate EUR/USD
+        cases.
+    - name: amount
+      description: Gross amount in integer minor units, e.g. 5100 represents 51.00 EUR for an EUR row.
+        Missing values load as NULL.
+    - name: fee
+      description: Fee in integer minor units. Converted to major units in payment staging.
+    - name: net
+      description: Net amount in integer minor units. Converted to major units before comparison with
+        bank amounts.
+    - name: status
+      description: Original provider balance status, available or pending in the fixture.
+    - name: type
+      description: Original provider transaction type, charge or refund in the fixture.
+    - name: reporting_category
+      description: Original provider reporting category, retained as context.
+    - name: source
+      description: Individual provider charge/refund source reference; not the ingestion source_system.
+    - name: imported_at
+      description: Insertion timestamp for this immutable history row; repeat loads preserve it.
+  - name: raw_bank_history
+    description: Append-only raw snapshot rows keyed by batch_id and source_row_number. Includes duplicate
+      source IDs. Staging selects one ready batch; other snapshots remain stored.
+    columns:
+    - name: batch_id
+      description: Foreign key to ingestion_batches; identifies the paired source snapshot.
+    - name: source_row_number
+      description: One-based data row number within this source file; distinguishes deliberate duplicate
+        IDs.
+    - name: bank_transaction_id
+      description: Original bank booking identifier, separate from the provider transaction identifier.
+    - name: booking_date
+      description: Bank booking date loaded from the CSV.
+    - name: reference_text
+      description: Original booking reference. May contain a supported provider ID, an unknown ID, or
+        no extractable ID.
+    - name: amount
+      description: Bank amount as numeric(12,2), already in major units; not divided by 100.
+    - name: currency
+      description: Original bank currency code; the supplied fixture contains EUR.
+    - name: counterparty
+      description: Original bank counterparty text, retained for context.
+    - name: imported_at
+      description: Insertion timestamp for this immutable history row; repeat loads preserve it.
+  - name: ingestion_batches
+    description: File-pair registry used to gate staging on ready batches and check expected source counts.
+    columns:
+    - name: batch_id
+      description: Saved UUID for a content-identified pair of provider and bank files.
+    - name: contract_version
+      description: Input contract version included in pair identity.
+    - name: pair_fingerprint
+      description: Unique SHA-256 fingerprint of both role-labelled file hashes and contract version.
+    - name: payment_fingerprint
+      description: SHA-256 of original provider file bytes.
+    - name: bank_fingerprint
+      description: SHA-256 of original bank file bytes.
+    - name: payment_file_name
+      description: Original basename at registration; renaming identical inputs does not create a new
+        batch.
+    - name: bank_file_name
+      description: Original bank file basename at registration.
+    - name: payment_row_count
+      description: Number of provider file rows, including duplicate IDs.
+    - name: bank_row_count
+      description: Number of bank file rows.
+    - name: status
+      description: registered, loading, ready or failed. Ready means both sources loaded, not that payments
+        are valid.
+    - name: registered_at
+      description: First registration timestamp, preserved on repeat submissions.
+    - name: load_started_at
+      description: Start time of the successful load transaction; rolled back on failed insertion.
+    - name: loaded_at
+      description: Time both sources were loaded and the batch became ready.
+    - name: last_error_type
+      description: Exception class from the latest failed load; cleared after a successful retry.
+  description: Legacy raw tables support the original full-replacement pipeline. History tables retain
+    paired CSV snapshots, selected by batch_id; ingestion_batches declares which batches are ready. The
+    optional Stripe API table and import_runs are outside these dbt sources.

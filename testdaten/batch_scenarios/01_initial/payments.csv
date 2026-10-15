@@ -1,0 +1,6 @@
+provider_transaction_id,created,currency,amount,fee,net,status,type,reporting_category,source
+txn_101,2026-10-01,eur,10000,200,9800,available,charge,charge,ch_101
+txn_102,2026-10-01,eur,5000,100,4900,pending,charge,charge,ch_102
+txn_103,2026-10-01,eur,2000,50,1950,available,charge,charge,ch_103
+txn_103,2026-10-01,eur,2000,50,1950,available,charge,charge,ch_103
+txn_104,2026-10-01,eur,3000,100,2900,available,charge,charge,ch_104

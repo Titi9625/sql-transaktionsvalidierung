@@ -1,0 +1,79 @@
+{
+  "purpose": "Acceptance expectations for synthetic batch-ingestion and saved-result regression checks.",
+  "scenarios": {
+    "01_initial": {
+      "import_outcome": "success",
+      "validation": {
+        "total_payment_records": 5,
+        "total_bank_records": 3,
+        "distinct_payment_ids": 4,
+        "valid_records": 1,
+        "invalid_payment_transactions": 3,
+        "total_validation_errors": 4,
+        "duplicate_errors": 2,
+        "missing_value_errors": 0,
+        "currency_errors": 0,
+        "amount_mismatch_errors": 1,
+        "unmatched_bank_transactions": 0,
+        "bank_reference_id_not_extractable_errors": 0,
+        "valid_transaction_ids": [
+          "txn_101"
+        ],
+        "validation_pass_rate_pct": 25,
+        "error_counts": {
+          "duplicate_transaction_id": 2,
+          "pending_transaction": 1,
+          "amount_mismatch": 1
+        }
+      }
+    },
+    "02_updated": {
+      "import_outcome": "success",
+      "validation": {
+        "total_payment_records": 5,
+        "total_bank_records": 4,
+        "distinct_payment_ids": 4,
+        "valid_records": 2,
+        "invalid_payment_transactions": 2,
+        "total_validation_errors": 3,
+        "duplicate_errors": 2,
+        "missing_value_errors": 0,
+        "currency_errors": 0,
+        "amount_mismatch_errors": 1,
+        "unmatched_bank_transactions": 0,
+        "bank_reference_id_not_extractable_errors": 0,
+        "valid_transaction_ids": [
+          "txn_101",
+          "txn_102"
+        ],
+        "validation_pass_rate_pct": 50,
+        "error_counts": {
+          "duplicate_transaction_id": 2,
+          "amount_mismatch": 1
+        }
+      }
+    },
+    "03_broken_format": {
+      "import_outcome": "reject",
+      "validation": null,
+      "error": {
+        "file": "bank.csv",
+        "data_row": 4,
+        "column": "amount",
+        "value": "NOT_A_NUMBER"
+      },
+      "publish_batch": false,
+      "preserve_previous_completed_batch": true
+    }
+  },
+  "repeat_initial_pair": {
+    "inserted_raw_rows": 0,
+    "new_successful_batch": false,
+    "preserve_previous_results": true
+  },
+  "history_after_two_successful_batches": {
+    "payment_rows": 10,
+    "bank_rows": 7,
+    "scope_duplicate_checks": "within each batch, never across batches"
+  }
+}

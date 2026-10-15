@@ -1,3 +1,16 @@
+{% set batch_id = selected_batch_id() | trim %}
+with raw_records as (
+{% if batch_id %}
+    select k.*
+    from {{ source('raw_data', 'raw_bank_history') }} k
+    inner join {{ source('raw_data', 'ingestion_batches') }} b
+        on k.batch_id = b.batch_id
+    where k.batch_id = '{{ batch_id }}'::uuid
+      and b.status = 'ready'
+{% else %}
+    select * from {{ source('raw_data', 'raw_bank_transactions') }}
+{% endif %}
+)
 select
     bank_transaction_id,
     booking_date,
@@ -7,4 +20,4 @@ select
     upper(currency) as currency,
     counterparty,
     imported_at
-from {{ source('raw_data', 'raw_bank_transactions') }}
+from raw_records

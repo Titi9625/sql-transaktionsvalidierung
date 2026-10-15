@@ -11,7 +11,7 @@ validation rules, and report the results with Python, PostgreSQL and dbt.
 
 | Layer | Models / sources | Responsibility |
 |---|---|---|
-| Raw inputs | `raw_payment_transactions`, `raw_bank_transactions` | Store the imported CSV rows, including deliberate errors. |
+| Raw inputs | `raw_payment_transactions`, `raw_bank_transactions` | Original mode reads these replaceable raw tables. With batch_id, read raw_payment_history and raw_bank_history for one ready ingestion_batches record, preserving duplicate source rows. |
 | Staging | `dbt_stg_payment_transactions`, `dbt_stg_bank_transactions` | Convert provider minor units to major units, uppercase currencies and extract a candidate payment ID from the bank reference. |
 | Validation | `dbt_invalid_transactions`, `dbt_valid_transactions` | Emit rule findings and select rows satisfying the prototype's validity conditions. |
 | Summary | `dbt_validation_summary` | Count current source rows, valid results and findings across both sources. |
@@ -58,23 +58,21 @@ payment reporting mart; the summary still includes them.
 
 ## What the tests establish
 
-There are **28 dbt data tests**, separate from the nine business rules. They check
+Original mode has **28 dbt data tests**. Named batch fixtures have **30**, including readiness and error-distribution checks. These tests are separate from the nine business rules. They check
 declared column properties, the fixed fixture results, exclusion of flagged
 payments from valid results, and the report's classification and aggregation.
-Four Python tests separately cover importer rollback/logging and runner control
-flow. Tests demonstrate behaviour for this fixture, not production readiness.
+The Python suite has **61 tests**: two original PostgreSQL importer rollback tests, isolated SQLite tests of batch/history logic, parser tests and runner/build-evidence checks. SQLite adapters do not establish PostgreSQL locking behaviour. Tests demonstrate fixture behaviour, not production readiness.
 
 ## Scope and limitations
 
 - The main pipeline uses synthetic CSVs. The optional Stripe API proof of concept
   is separate and does not feed these models.
-- Each importer replaces one raw table in its own transaction. The entire pipeline
-  is not one atomic transaction. `import_runs` records import attempts separately.
-- Views and reports describe the currently loaded snapshot, not stored historical
-  pipeline results. Summary dates and finding timestamps are evaluated at query time.
+- Original importers replace their raw tables independently. The batch loader commits both source histories together and recognises repeated byte-identical pairs. Each changed pair is a full snapshot, not an incremental update.
+- Batch-mode views in batch_validation describe the last selected batch. Successful validation outputs are copied to permanent public.validation_* tables under a new validation_run_id. Later validations preserve earlier saved results.
+- Raw loading and validation are separate transactions. A failed validation leaves its ready raw batch available for retry; it does not publish a successful result snapshot.
 - The report assumes one date per payment ID and the current single provider
   source. Missing or conflicting payment dates fail the reporting consistency test.
-- Real settlement batches, foreign-exchange conversion, incremental ingestion,
+- Real settlement batches, foreign-exchange conversion, row-level incremental updates,
   broader NULL/status handling, scheduling and a business dashboard are outside
   the current implementation.
 
