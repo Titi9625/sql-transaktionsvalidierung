@@ -26,6 +26,14 @@ er speist diese CSV-Pipeline nicht.
 Das Badge zeigt den Stand von `main`. Den tatsächlichen Status eines Branches
 oder Pull Requests zeigt [GitHub Actions](https://github.com/Titi9625/sql-transaktionsvalidierung/actions).
 
+## Databricks-Erweiterung (in Entwicklung)
+
+Eine zweite Umsetzung mit PySpark, SQL und Delta-Tabellen entsteht in
+[`databricks/`](databricks/README.md). Der aktuelle Stand umfasst die Einrichtung,
+die CSV-Vorschau, leere Bronze-Tabellen und die Vorbereitung der Dateipaar-ID.
+Beladung und Validierung in Databricks sind noch nicht implementiert.
+Die PostgreSQL/dbt-Pipeline bleibt die ausführbare Referenz.
+
 ## Datenfluss
 
 ```mermaid
