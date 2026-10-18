@@ -1,67 +1,111 @@
 # Databricks payment-reconciliation extension
 
 Work in progress: a second implementation of the existing PostgreSQL/dbt project,
-using Databricks Free Edition, PySpark, SQL and Delta tables. Inputs are synthetic
-payment-provider and bank exports, not real customer or financial data.
+using Databricks Free Edition, PySpark, SQL and Delta tables. All inputs are
+synthetic payment-provider and bank exports.
 
-## Current checkpoint
+## Current checkpoint: initial Bronze load
 
-Verified interactively in Databricks:
+Verified interactively in Databricks Free Edition on serverless compute:
 
-- The setup notebook runs on serverless compute in the `workspace` catalog.
-- Three schemas exist: `reconciliation_bronze`, `reconciliation_silver`,
-  `reconciliation_gold`.
-- The Bronze `incoming_files` volume holds the initial CSV pair in `01_initial/`.
-- The ingestion notebook previews 5 payment rows and 3 bank rows, preserving both
-  copies of `txn_103`.
-- Three empty Delta tables exist: `ingestion_batches`, `raw_payment_history`,
-  `raw_bank_history`.
-- Input preparation preserves source record positions and calculates a file-pair
-  fingerprint. The initial pair fingerprint is
-  `8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d`.
+| Check | Observed result |
+|---|---|
+| Project setup | Bronze, Silver and Gold schemas; managed `incoming_files` volume |
+| Initial input preview | 5 payment rows and 3 bank rows |
+| First Bronze load | 5 payment rows added, 3 bank rows added, batch `ready` |
+| Repeat load | Same batch recognised; 0 payment rows and 0 bank rows added |
 
-**No transaction rows have been inserted into these Delta tables yet.**
-CSV structure checks currently cover column names, field counts and nonempty
-snapshots. Amount/date-format checks, repeat-safe loading, validation rules,
-reporting and automated jobs are not yet implemented in this extension.
+`txn_103` remains two separate source records (positions 3 and 4). The loader
+identifies a stored source record by its batch ID and source record position,
+not by the provider transaction ID. Detecting duplicate payment IDs remains a
+later business-validation step.
 
-The existing PostgreSQL/dbt implementation remains the regression reference;
-its successful CI does not establish that these cloud notebooks execute.
+The initial pair fingerprint/batch ID is
+`8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d` for the uploaded bytes.
+Changing bytes, including line endings, can produce a different ID. PostgreSQL
+stores the pair fingerprint separately from its generated UUID batch ID; this
+Databricks implementation uses the pair fingerprint itself as the batch ID.
 
-## Source notebooks
+## What the loader does
+
+1. Capture both CSVs, preserve their record positions and fingerprint their bytes.
+2. Check columns, required fields, dates and exact amount formats before writes.
+   Source amounts remain text in Bronze. Missing amounts stay missing; zero
+   stays zero. Pending payments, refunds, non-EUR currencies and duplicate IDs
+   remain available for later business checks.
+3. Register the pair in `ingestion_batches`.
+4. Insert missing source record positions into the two raw-history Delta tables.
+   Unexpected or changed existing records cause an error rather than an overwrite.
+5. Verify both stored sources before setting the batch to `ready`.
+6. On a repeat of a ready pair, verify its existing records and skip new inserts.
+
+The source file, dataset/DataFrame and Delta table have different roles:
+uploaded CSVs are the original files; DataFrames describe data used during
+processing; Delta tables persist the loaded records.
+
+## Source notebooks and execution order
 
 | File | Cells and purpose |
 |---|---|
-| [00_setup_payment_reconciliation.py](notebooks/00_setup_payment_reconciliation.py) | Inspect the environment; create project schemas and the input-file volume. |
-| [01_ingest_bronze.py](notebooks/01_ingest_bronze.py) | Preview inputs; create empty Bronze tables; prepare captured source rows and pair identity. |
+| [00_setup_payment_reconciliation.py](notebooks/00_setup_payment_reconciliation.py) | Inspect the environment; create schemas and a managed input-file volume. |
+| [01_ingest_bronze.py](notebooks/01_ingest_bronze.py) | 1: preview inputs; 2: create tables; 3: prepare the pair; 4: validate formats and load Bronze. |
 
-These are Databricks Python source notebooks. The `# COMMAND ----------` lines
-separate cells. Import them into Databricks as notebooks; they require the
-Databricks-provided `spark` and `display` objects and are not standalone local
-Python programs.
+These are Databricks Python source notebooks. `# COMMAND ----------` separates
+cells. Import them as notebooks; they use Databricks-provided `spark` and
+`display` objects and are not standalone local Python programs.
 
-## Reproduce this checkpoint
+To reproduce:
 
-1. Run both cells of `00_setup_payment_reconciliation` in order.
-2. In the volume `workspace.reconciliation_bronze.incoming_files`, create the
-   directory `01_initial`.
-3. Upload the two files from the repository's
-   `testdaten/batch_scenarios/01_initial/` directory to:
+1. Run both setup-notebook cells.
+2. Create the directory `01_initial` inside
+   `workspace.reconciliation_bronze.incoming_files`.
+3. Upload `testdaten/batch_scenarios/01_initial/payments.csv` and `bank.csv` to:
    `/Volumes/workspace/reconciliation_bronze/incoming_files/01_initial/`.
-4. Run the first three cells of `01_ingest_bronze` in order.
+4. Run all four ingestion-notebook cells in order. Expect 5/3 inserted rows and
+   status `ready`.
+5. Run Cell 4 again. Expect 0/0 inserted rows, with the same stored delivery.
 
-Bronze keeps incoming records; Silver will prepare and validate them; Gold will
-provide reporting outputs. A batch ID labels one payment/bank file pair. The
-Databricks implementation uses its pair fingerprint as that label; PostgreSQL
-stores the pair fingerprint separately from its generated UUID batch ID.
+After a notebook-session restart, rerun Cell 3 before Cell 4. The prepared Python
+variables are session state; uploaded files and Delta tables persist separately.
+`ready` means both sources were loaded, not that every payment is valid.
 
-## Next milestones
+## Tests and evidence
 
-1. Load both sources, check repeat behaviour and handle incomplete attempts.
-2. Implement comparable Silver fields and the nine validation rules.
-3. Reproduce initial and updated fixture results in Gold reports and tests.
-4. Connect the steps into a Databricks job and document a reproducible demo.
+[test_databricks_input_checks.py](../tests/test_databricks_input_checks.py) contains
+seven portable tests of the actual notebook's input/helper functions. It checks
+initial and updated pair identities, renamed inputs, duplicate record positions,
+invalid dates/amounts/ranges, missing versus zero amounts, and rejection of the
+malformed bank fixture before Spark is accessed.
 
-This extension currently reads each small input file into the notebook's Python
-process to preserve CSV record positions and fingerprint the exact parsed bytes.
-It is not yet a distributed large-file ingestion design or a scale benchmark.
+Run the portable checks without a Databricks account or PostgreSQL connection:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_databricks_input_checks.py -v
+```
+
+The test loader extracts imports and function definitions from the source
+notebook without running its top-level Spark cells. These tests do not execute
+Delta `MERGE` or prove cloud execution. The cloud evidence for this checkpoint
+is the manually verified first load and repeat. The existing CI runs the portable
+tests as part of Python discovery on pull requests to `main`; the branch name
+`databricks-extension` does not itself trigger the current push workflow.
+
+## Boundaries and remaining work
+
+- Delta commits occur per table. This loader does not provide PostgreSQL-style
+  rollback across both raw tables and the registry. An incomplete/failed attempt
+  may leave partial rows. It is not published as ready; a serial retry inserts
+  missing positions and checks both sources. **Live failure/retry injection is
+  not yet verified.** Silver consumers must select only ready batches.
+- Run one loader at a time. Registry and source keys are checked in code rather
+  than protected by enforced unique constraints. Concurrent multi-writer use is
+  not supported by this checkpoint.
+- The notebook captures each small file in its Python process. This preserves
+  record positions and ties fingerprints to the exact parsed bytes, but is not
+  distributed large-file ingestion or a scale benchmark.
+- Updated snapshot loading, live malformed-file rejection and saved-result
+  history still need cloud verification. The portable checks cover formats and
+  identity only.
+- Silver preparation and the nine validation rules, Gold reports, and a
+  Databricks job are the next implementation milestones. The PostgreSQL/dbt
+  version remains the complete regression reference.

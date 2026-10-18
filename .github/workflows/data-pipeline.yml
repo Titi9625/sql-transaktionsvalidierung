@@ -118,6 +118,7 @@ jobs:
           - Initial results (1 valid / 4 findings) and updated results (2 valid / 3 findings) remain saved separately.
           - PostgreSQL acceptance checks verified all saved summaries, valid IDs, findings and report totals.
           - Malformed bank input failed without changing any batch or saved-result row.
-          - 61 Python tests passed, including two original PostgreSQL importer rollback tests.
+          - Python tests passed, including two PostgreSQL importer rollback tests and portable Databricks input checks.
+          - Databricks input checks do not execute Spark or Delta operations.
           - Other Python database tests use isolated SQLite adapters; they do not prove PostgreSQL concurrency behaviour.
           EOF

@@ -20,7 +20,7 @@ er speist diese CSV-Pipeline nicht.
 | Data Engineering | CSV-Vertrag, SHA-256-Dateipaar-Erkennung, atomare Beladung beider Quellen, Rohdatenhistorie und Pipeline-Runner |
 | Analytics Engineering | Sechs dbt-Views, neun Prüfregeln, dokumentierte Modelle und täglicher Reporting-Mart |
 | Nachvollziehbarkeit | Batch-ID je Eingabepaar, eigene Validierungslauf-ID, gespeicherte Ergebnisse, Code-Fingerprint und dbt-Laufmetadaten |
-| Tests | 61 Python-Tests; 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
+| Tests | 68 Python-Tests (davon 7 portable Databricks-Eingabeprüfungen); 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
 | CI | GitHub Actions mit PostgreSQL 18, ursprünglicher Pipeline, Batch-Wiederholung, aktualisiertem Snapshot und fehlerhafter Datei |
 
 Das Badge zeigt den Stand von `main`. Den tatsächlichen Status eines Branches
@@ -29,10 +29,12 @@ oder Pull Requests zeigt [GitHub Actions](https://github.com/Titi9625/sql-transa
 ## Databricks-Erweiterung (in Entwicklung)
 
 Eine zweite Umsetzung mit PySpark, SQL und Delta-Tabellen entsteht in
-[`databricks/`](databricks/README.md). Der aktuelle Stand umfasst die Einrichtung,
-die CSV-Vorschau, leere Bronze-Tabellen und die Vorbereitung der Dateipaar-ID.
-Beladung und Validierung in Databricks sind noch nicht implementiert.
-Die PostgreSQL/dbt-Pipeline bleibt die ausführbare Referenz.
+[`databricks/`](databricks/README.md). Die initialen Beispieldaten wurden in
+Databricks geladen: 5 Payment- und 3 Bankzeilen. Eine erneute Ausführung fügte
+0 weitere Rohzeilen hinzu. Sieben portable Tests prüfen Eingabeformate und
+Dateipaar-Identität; sie führen keine Delta-Schreiboperationen aus.
+Silver-Validierung, Gold-Reporting und Jobs sind noch nicht implementiert.
+Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss
 
@@ -210,7 +212,7 @@ Die ursprünglichen Importer ersetzen ihre Rohdatentabellen getrennt mit
 `TRUNCATE`/`INSERT` und protokollieren in `import_runs`. Sie verändern die
 neuen Batch-Historientabellen nicht.
 
-Die Python-Suite enthält 61 Tests. Zwei ursprüngliche Integrationstests prüfen
+Die Python-Suite enthält 68 Tests: 61 für den bisherigen Projektstand und sieben portable Prüfungen der Databricks-Eingabelogik. Zwei ursprüngliche Integrationstests prüfen
 Rollback und Fehlerprotokollierung in PostgreSQL. Weitere Tests prüfen Parser,
 Fingerprints, Batch-Isolation, gespeicherte Ergebnisse und Runner-Verhalten;
 ihre Datenbankadapter verwenden SQLite. Sie beweisen keine PostgreSQL-Sperr-
