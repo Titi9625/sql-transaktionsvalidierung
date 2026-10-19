@@ -4,7 +4,7 @@ Work in progress: a second implementation of the existing PostgreSQL/dbt project
 using Databricks Free Edition, PySpark, SQL and Delta tables. All inputs are
 synthetic payment-provider and bank exports.
 
-## Current checkpoint: Bronze loading and Silver validation
+## Current checkpoint: initial Bronze-to-Gold flow
 
 Verified interactively in Databricks Free Edition on serverless compute:
 
@@ -16,6 +16,7 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | Repeat load | Same batch recognised; 0 payment rows and 0 bank rows added |
 | Silver preparation (19 October 2026) | 5 payment rows, 3 bank rows; row-count and SQL-type checks passed |
 | Initial Silver validation (19 October 2026) | 1 valid payment, 4 findings; exact scenario check passed |
+| Initial Gold report (19 October 2026) | Checked report saved and fully read back; one saved run for the initial batch |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -53,6 +54,7 @@ processing; Delta tables persist the loaded records.
 | [01_ingest_bronze.py](notebooks/01_ingest_bronze.py) | 1: preview inputs; 2: create tables; 3: prepare the pair; 4: validate formats and load Bronze. |
 | [02_prepare_silver.py](notebooks/02_prepare_silver.py) | Create two persistent preparation views; preview the latest ready batch and check counts/types. |
 | [03_validate_silver.py](notebooks/03_validate_silver.py) | Apply nine business rules in two views; display results and check expected example IDs/error codes. |
+| [04_report_gold.py](notebooks/04_report_gold.py) | Create summary/daily views; check and append a complete report package; expose saved results and verify full read-back. |
 
 These are Databricks Python source notebooks. `# COMMAND ----------` separates
 cells. Import them as notebooks; they use Databricks-provided `spark` and
@@ -75,6 +77,10 @@ To reproduce:
 7. Run all three cells of `03_validate_silver` (or paste its entire source into
    one Python cell). For the initial pair expect 1 valid payment, 4 findings
    and `Scenario check passed: 01_initial.`
+8. Run all three cells of `04_report_gold` (or paste its entire source into
+   one Python cell). Expect `Gold report checked and saved successfully.`,
+   a report run UUID, 25.00% pass rate, and EUR 98.00 accepted net.
+   The first successful execution has one saved run for this batch.
 
 After a notebook-session restart, rerun Cell 3 before Cell 4. The prepared Python
 variables are session state; uploaded files and Delta tables persist separately.
@@ -129,7 +135,70 @@ The preview selects the latest ready delivery. The final notebook cell uses
 `expected_scenario = "01_initial"`; change it to `"02_updated"` for that
 fixture or `None` for your own data. The label chooses expected answers,
 not input files or the batch to validate. Views return current results;
-`detected_at` is computed during queries. Result history is not saved yet.
+`detected_at` is computed during live queries. Gold captures and stores
+those values together with the other results.
+
+## Gold reporting and saved results
+
+The initial Gold notebook completed successfully on 19 October 2026. Its summary
+contains 5 payment rows, 3 bank rows, 4 different payment IDs, 1 accepted ID,
+3 flagged IDs and 4 findings. The successful fixed-scenario check establishes
+the 25.00% pass rate (1/4), even where screenshot columns are horizontally clipped.
+The checked package also reconciles its accepted net of EUR 98.00 with the daily
+report. The notebook writes the checked values once and compares the full stored
+package after reading it back. [Initial Gold evidence](evidence/gold_initial.png).
+This first execution proves one saved package; retention across another report
+run or a changed input snapshot is a later cloud check, not yet claimed here.
+
+All following objects are in `workspace.reconciliation_gold`:
+
+| Object | Kind | Purpose |
+|---|---|---|
+| `validation_summary` | Live view | Per-batch counts and all nine finding-code totals. |
+| `mart_daily_reconciliation` | Live view | Per-batch/provider-date/source counts and accepted net. |
+| `validation_run_history` | Delta table | One complete checked package per report run. |
+| `saved_validation_summaries` | View over history | Stored summary with run ID, capture time and definition fingerprint. |
+| `saved_valid_payments` | View over history | Stored accepted matches for a run. |
+| `saved_validation_findings` | View over history | Stored finding rows for a run. |
+| `saved_daily_reports` | View over history | Stored daily figures for a run. |
+
+Each history row stores a summary STRUCT and typed ARRAY-of-STRUCT detail/report
+collections. One complete package is appended in a single Delta table write.
+The saved views expose flat rows from the stored values; they do not rerun Silver
+rules. This avoids distributing one result run across several independent writes.
+It is not a multi-table transaction or an administrator-proof immutable audit log.
+
+Batch ID identifies the input delivery; the UUID `validation_run_id` identifies
+one saved report. A full Gold rerun is designed to append a new report run for
+the same batch, without loading CSVs again. Filter saved results by the intended
+run ID; adding repeated snapshots/runs would count the same payments again.
+
+The daily model counts accepted IDs before joining, so several matching bank
+rows cannot inflate accepted payment counts or accepted net. The summary keeps
+both `valid_records` (joined result rows) and `valid_payment_count` (different
+accepted IDs). It also reports `unclassified_payment_count` for existing rule
+coverage gaps. Bank-only findings stay outside the payment daily mart.
+
+The package captures the selected batch, capture timestamp, format version and
+a SHA-256 fingerprint of the four Silver and two live Gold view definitions.
+This is selected-SQL provenance, not a complete code or environment fingerprint.
+Capture uses one composed Spark query followed by bounded driver-side checks,
+then writes those captured values. A package may contain at most 10,000 combined
+detail/report rows; this is a small-fixture learning design, not a scale benchmark.
+Run serially without concurrent raw edits or view replacements. View creation
+and history append are separate actions; a later notebook failure may leave a
+complete stored package. No automatic result-schema evolution is enabled.
+
+Example: inspect your saved reports in a Databricks SQL cell:
+
+```sql
+SELECT validation_run_id, batch_id, captured_at,
+       distinct_payment_count, valid_payment_count,
+       invalid_payment_transactions, total_validation_errors,
+       validation_pass_rate_pct
+FROM workspace.reconciliation_gold.saved_validation_summaries
+ORDER BY captured_at;
+```
 
 ## Tests and evidence
 
@@ -148,7 +217,14 @@ fixture, both small snapshots, all nine rules, isolation, the one-cent
 boundary, multiple findings, NULL/zero behavior and bank-row lineage.
 These are not Spark execution or DECIMAL-type tests.
 
-Run these portable checks without a Databricks account or PostgreSQL connection:
+[test_databricks_gold_reports.py](../tests/test_databricks_gold_reports.py) adds
+eleven portable checks of actual Gold SQL and the package validator: initial,
+updated and original fixtures, batch isolation, duplicate bank matches,
+bank-only findings, rounding, unclassified records, inconsistent packages,
+empty denominators and the size limit. It uses the same integer-cent SQLite
+adapter and does not execute Spark nested schemas or Delta append/read-back.
+
+Run all 27 portable Databricks checks without a Databricks account or PostgreSQL connection:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_databricks_*.py" -v
@@ -157,9 +233,10 @@ Run these portable checks without a Databricks account or PostgreSQL connection:
 The test loader extracts imports and function definitions from the source
 notebook without running its top-level Spark cells. These tests do not execute
 Delta `MERGE` or prove cloud execution. The cloud evidence for this checkpoint
-includes the manually verified first load, repeat, Silver preparation and
-initial validation output. Nine additional portable tests do not establish
-updated-snapshot or failure-recovery behavior in Databricks. The existing CI runs the portable
+includes the manually verified first load, repeat, Silver preparation,
+initial validation and first Gold package save/read-back. Portable tests
+do not establish updated-snapshot, multi-run retention or failure-recovery
+behavior in Databricks. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
 `databricks-extension` does not itself trigger the current push workflow.
 
@@ -176,12 +253,12 @@ tests as part of Python discovery on pull requests to `main`; the branch name
 - The notebook captures each small file in its Python process. This preserves
   record positions and ties fingerprints to the exact parsed bytes, but is not
   distributed large-file ingestion or a scale benchmark.
-- Updated snapshot loading, live malformed-file rejection and saved-result
-  history still need cloud verification. The portable checks cover formats and
+- Updated snapshot loading, live malformed-file rejection, retention across
+  multiple saved report runs and changed inputs still need cloud verification. The portable checks cover formats and
   identity, SQL rule semantics and batch isolation in the local adapter;
   they do not establish those additional cloud execution paths.
-- Silver preparation and initial validation are cloud-verified. Gold reports,
-  result-history storage and a Databricks job remain to be implemented.
+- The initial Bronze-to-Gold path, including one complete result package, is
+  cloud-verified. A parameterised Databricks job remains to be implemented.
   The PostgreSQL/dbt version remains the complete regression reference.
 - The port preserves the original rule scope: no additional bank-currency,
   duplicate-bank, fee-arithmetic or unknown-status rules. A NULL currency
