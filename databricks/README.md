@@ -4,7 +4,7 @@ Work in progress: a second implementation of the existing PostgreSQL/dbt project
 using Databricks Free Edition, PySpark, SQL and Delta tables. All inputs are
 synthetic payment-provider and bank exports.
 
-## Current checkpoint: Bronze loading and Silver preparation
+## Current checkpoint: Bronze loading and Silver validation
 
 Verified interactively in Databricks Free Edition on serverless compute:
 
@@ -15,11 +15,12 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | First Bronze load | 5 payment rows added, 3 bank rows added, batch `ready` |
 | Repeat load | Same batch recognised; 0 payment rows and 0 bank rows added |
 | Silver preparation (19 October 2026) | 5 payment rows, 3 bank rows; row-count and SQL-type checks passed |
+| Initial Silver validation (19 October 2026) | 1 valid payment, 4 findings; exact scenario check passed |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
-not by the provider transaction ID. Detecting duplicate payment IDs remains a
-later business-validation step.
+not by the provider transaction ID. Business validation flags both duplicate
+`txn_103` records separately.
 
 The initial pair fingerprint/batch ID is
 `8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d` for the uploaded bytes.
@@ -51,6 +52,7 @@ processing; Delta tables persist the loaded records.
 | [00_setup_payment_reconciliation.py](notebooks/00_setup_payment_reconciliation.py) | Inspect the environment; create schemas and a managed input-file volume. |
 | [01_ingest_bronze.py](notebooks/01_ingest_bronze.py) | 1: preview inputs; 2: create tables; 3: prepare the pair; 4: validate formats and load Bronze. |
 | [02_prepare_silver.py](notebooks/02_prepare_silver.py) | Create two persistent preparation views; preview the latest ready batch and check counts/types. |
+| [03_validate_silver.py](notebooks/03_validate_silver.py) | Apply nine business rules in two views; display results and check expected example IDs/error codes. |
 
 These are Databricks Python source notebooks. `# COMMAND ----------` separates
 cells. Import them as notebooks; they use Databricks-provided `spark` and
@@ -70,6 +72,9 @@ To reproduce:
    Python variables from notebook 01. Expect 5 payment and 3 bank rows for
    the initial batch. When pasting its entire source into one Python cell,
    run that single cell instead.
+7. Run all three cells of `03_validate_silver` (or paste its entire source into
+   one Python cell). For the initial pair expect 1 valid payment, 4 findings
+   and `Scenario check passed: 01_initial.`
 
 After a notebook-session restart, rerun Cell 3 before Cell 4. The prepared Python
 variables are session state; uploaded files and Delta tables persist separately.
@@ -98,6 +103,34 @@ The notebook's count and date/decimal-type checks also passed.
 This verifies preparation for this fixture; it does not establish
 business-rule parity, failure recovery, multiple-batch cloud behavior or scale.
 
+## Silver validation
+
+The two views `workspace.reconciliation_silver.invalid_transactions` and
+`workspace.reconciliation_silver.valid_transactions` port the nine rules and
+acceptance conditions from the PostgreSQL dbt validation models. Every join,
+duplicate grouping and exclusion includes batch ID. Source record positions
+remain available; mismatch findings identify the related bank row position.
+
+The initial cloud result was inspected and its exact scenario check passed:
+
+| Payment | Result |
+|---|---|
+| `txn_101` | Valid: net and bank amount both 98.00 |
+| `txn_102` | One pending finding |
+| `txn_103` | Two duplicate findings, for source positions 3 and 4 |
+| `txn_104` | One mismatch finding: 29.00 versus 28.95 |
+
+[Verified initial validation output](evidence/validation_initial.png).
+Four findings concern three distinct payment IDs. Matching a reference
+alone does not establish validity. Pending and refund are reporting
+exceptions within this scenario, not proof of an erroneous economic event.
+
+The preview selects the latest ready delivery. The final notebook cell uses
+`expected_scenario = "01_initial"`; change it to `"02_updated"` for that
+fixture or `None` for your own data. The label chooses expected answers,
+not input files or the batch to validate. Views return current results;
+`detected_at` is computed during queries. Result history is not saved yet.
+
 ## Tests and evidence
 
 [test_databricks_input_checks.py](../tests/test_databricks_input_checks.py) contains
@@ -106,16 +139,27 @@ initial and updated pair identities, renamed inputs, duplicate record positions,
 invalid dates/amounts/ranges, missing versus zero amounts, and rejection of the
 malformed bank fixture before Spark is accessed.
 
-Run the portable checks without a Databricks account or PostgreSQL connection:
+[test_databricks_validation_rules.py](../tests/test_databricks_validation_rules.py)
+adds nine portable checks of the actual notebook SQL. SQLite is a logic
+adapter: qualified table names are adapted, and monetary values use exact
+integer cents with a one-cent threshold. Results are compared with the actual
+dbt queries for each batch separately. Checks cover the original 50/40-row
+fixture, both small snapshots, all nine rules, isolation, the one-cent
+boundary, multiple findings, NULL/zero behavior and bank-row lineage.
+These are not Spark execution or DECIMAL-type tests.
+
+Run these portable checks without a Databricks account or PostgreSQL connection:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p test_databricks_input_checks.py -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_databricks_*.py" -v
 ```
 
 The test loader extracts imports and function definitions from the source
 notebook without running its top-level Spark cells. These tests do not execute
 Delta `MERGE` or prove cloud execution. The cloud evidence for this checkpoint
-is the manually verified first load, repeat and initial Silver output. The existing CI runs the portable
+includes the manually verified first load, repeat, Silver preparation and
+initial validation output. Nine additional portable tests do not establish
+updated-snapshot or failure-recovery behavior in Databricks. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
 `databricks-extension` does not itself trigger the current push workflow.
 
@@ -134,7 +178,14 @@ tests as part of Python discovery on pull requests to `main`; the branch name
   distributed large-file ingestion or a scale benchmark.
 - Updated snapshot loading, live malformed-file rejection and saved-result
   history still need cloud verification. The portable checks cover formats and
-  identity only.
-- Silver preparation is verified for the initial batch. The nine business
-  validation rules, Gold reports and a Databricks job remain to be implemented. The PostgreSQL/dbt
-  version remains the complete regression reference.
+  identity, SQL rule semantics and batch isolation in the local adapter;
+  they do not establish those additional cloud execution paths.
+- Silver preparation and initial validation are cloud-verified. Gold reports,
+  result-history storage and a Databricks job remain to be implemented.
+  The PostgreSQL/dbt version remains the complete regression reference.
+- The port preserves the original rule scope: no additional bank-currency,
+  duplicate-bank, fee-arithmetic or unknown-status rules. A NULL currency
+  does not satisfy SQL `<> 'EUR'`; normal CSV ingestion rejects missing
+  currency before loading. Unknown statuses can produce neither a finding
+  nor an accepted payment. Multiple matching bank records can multiply
+  joined results. These limits are not silently changed by the port.
