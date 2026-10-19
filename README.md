@@ -33,7 +33,11 @@ Eine zweite Umsetzung mit PySpark, SQL und Delta-Tabellen entsteht in
 Databricks geladen: 5 Payment- und 3 Bankzeilen. Eine erneute Ausführung fügte
 0 weitere Rohzeilen hinzu. Sieben portable Tests prüfen Eingabeformate und
 Dateipaar-Identität; sie führen keine Delta-Schreiboperationen aus.
-Silver-Validierung, Gold-Reporting und Jobs sind noch nicht implementiert.
+Zwei Silver-Views bereiten geladene Batches für den Vergleich vor: Cent-Beträge
+werden in Euro umgerechnet, Datums- und Währungsfelder vereinheitlicht und
+Bankreferenz-IDs extrahiert. Im initialen Cloud-Test bleiben 5 Payment- und
+3 Bankzeilen einschließlich des doppelten `txn_103` erhalten.
+Die neun fachlichen Validierungsregeln, Gold-Reporting und Jobs folgen noch.
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss
@@ -245,7 +249,8 @@ Lokale Zugangsdaten werden nicht für CI verwendet.
   manipulationssicher geschützt.
 - Kleine synthetische Daten, fester CSV-Vertrag, ein Provider-Quellsystem und
   referenzbasierter Einzelabgleich. Keine realen Sammelauszahlungen, FX-Umrechnung,
-  zeilenweisen Upserts, Cloud-Ausführung oder Lasttests. Weitere NULL-/Statusfälle
+  zeilenweisen Upserts oder Lasttests. Die Cloud-Erweiterung ist separat
+  in `databricks/` dokumentiert. Weitere NULL-/Statusfälle
   benötigen zusätzliche Regeln. Noch kein Dashboard, Scheduler oder Upload-UI.
 
 ## Wichtige Einstiegspunkte
