@@ -45,8 +45,11 @@ keinen Spark-Test. Gold-Zusammenfassung, Tagesreport und die erste gespeicherte
 Ergebniskopie sind ebenfalls in Databricks geprüft: 4 unterschiedliche
 Payment-IDs, 1 gültige ID, 3 markierte IDs und 4 Prüfmeldungen; die Quote
 beträgt 25 %. Die Ergebniskopie wurde vollständig zurückgelesen und verglichen.
-Aktualisierte Snapshots, Fehlerwiederaufnahme und Jobs sind noch zu prüfen
-bzw. umzusetzen.
+Am 20. Oktober 2026 wurde auch der aktualisierte Snapshot in Databricks
+geprüft: 2 gültige Payment-IDs, 3 Prüfmeldungen und 50 %. Die gespeicherte
+Übersicht enthält weiterhin das erste Ergebnis mit 25 % sowie zwei separate
+Läufe für den aktualisierten Snapshot. Fehlerwiederaufnahme, die Cloud-Prüfung
+fehlerhafter Eingaben und Jobs stehen noch aus.
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss

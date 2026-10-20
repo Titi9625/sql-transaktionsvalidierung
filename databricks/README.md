@@ -4,7 +4,7 @@ Work in progress: a second implementation of the existing PostgreSQL/dbt project
 using Databricks Free Edition, PySpark, SQL and Delta tables. All inputs are
 synthetic payment-provider and bank exports.
 
-## Current checkpoint: initial Bronze-to-Gold flow
+## Current checkpoint: initial and updated snapshots with saved history
 
 Verified interactively in Databricks Free Edition on serverless compute:
 
@@ -17,6 +17,8 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | Silver preparation (19 October 2026) | 5 payment rows, 3 bank rows; row-count and SQL-type checks passed |
 | Initial Silver validation (19 October 2026) | 1 valid payment, 4 findings; exact scenario check passed |
 | Initial Gold report (19 October 2026) | Checked report saved and fully read back; one saved run for the initial batch |
+| Updated Bronze load (20 October 2026) | New ready batch; 5 payment rows and 4 bank rows added |
+| Saved report comparison (20 October 2026) | Initial run 1 valid / 4 findings / 25%; two updated runs each 2 / 3 / 50% |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -55,6 +57,7 @@ processing; Delta tables persist the loaded records.
 | [02_prepare_silver.py](notebooks/02_prepare_silver.py) | Create two persistent preparation views; preview the latest ready batch and check counts/types. |
 | [03_validate_silver.py](notebooks/03_validate_silver.py) | Apply nine business rules in two views; display results and check expected example IDs/error codes. |
 | [04_report_gold.py](notebooks/04_report_gold.py) | Create summary/daily views; check and append a complete report package; expose saved results and verify full read-back. |
+| [05_inspect_saved_history.py](notebooks/05_inspect_saved_history.py) | Read-only inspection of saved reports; does not load inputs or create a report run. |
 
 These are Databricks Python source notebooks. `# COMMAND ----------` separates
 cells. Import them as notebooks; they use Databricks-provided `spark` and
@@ -147,8 +150,12 @@ the 25.00% pass rate (1/4), even where screenshot columns are horizontally clipp
 The checked package also reconciles its accepted net of EUR 98.00 with the daily
 report. The notebook writes the checked values once and compares the full stored
 package after reading it back. [Initial Gold evidence](evidence/gold_initial.png).
-This first execution proves one saved package; retention across another report
-run or a changed input snapshot is a later cloud check, not yet claimed here.
+On 20 October 2026 the updated snapshot was also loaded and processed. The
+saved-summary query showed three report runs: the initial 25% result and
+two updated 50% results with distinct report run IDs. This verifies visible
+summary retention across changed input and repeated Gold execution. It does
+not prove every raw record or every historical detail remained unchanged
+under failures or concurrent edits.
 
 All following objects are in `workspace.reconciliation_gold`:
 
@@ -200,6 +207,44 @@ FROM workspace.reconciliation_gold.saved_validation_summaries
 ORDER BY captured_at;
 ```
 
+## Updated snapshot and history verification
+
+`02_updated` changes `txn_102` from pending to available and adds `bank_102`
+for EUR 49.00. The duplicate `txn_103` and the EUR 0.05 mismatch for `txn_104`
+remain. Expected updated results: 2 accepted IDs, 2 flagged IDs, 3 findings,
+50.00% pass rate and EUR 147.00 accepted net. Fixed scenario checks in notebooks
+03 and 04 verify these expectations when set to `02_updated`.
+
+To reproduce after the initial run:
+
+1. Create `02_updated` inside the existing `incoming_files` volume and upload
+   both files from `testdaten/batch_scenarios/02_updated/`.
+2. In notebook 01, change both input paths (Cell 1 preview and Cell 3 capture)
+   from `01_initial` to `02_updated`. Run all four cells. Expect 5/4 new rows
+   and ready status on the first load. [Observed updated load](evidence/updated_bronze.png).
+   The repository keeps its initial-default paths so the first-run instructions
+   remain reproducible; these are manual scenario-selection steps for now.
+3. The existing Silver views already include new ready batches. In notebook 03
+   set `expected_scenario = "02_updated"` and run it. Expect 2 valid rows,
+   3 findings and a passed scenario check.
+4. In notebook 04 set the same expected scenario and run it. Expect a new saved
+   report with 50.00% pass rate. Repeating Gold creates another report run.
+5. Run notebook 05, or paste its source into a new Python cell. It only reads
+   saved summaries. [Observed comparison](evidence/report_history_comparison.png).
+
+Observed on 20 October 2026:
+
+| Delivery prefix | Report run prefix | Valid IDs | Findings | Pass rate |
+|---|---|---|---|---|
+| `8199572c3db5` | `b50bdd09` | 1 | 4 | 25.00% |
+| `928cceb410a8` | `7850d94c` | 2 | 3 | 50.00% |
+| `928cceb410a8` | `82149161` | 2 | 3 | 50.00% |
+
+These are two deliveries and three saved reports. Repeated Gold execution does
+not call the CSV loader. The extra report is expected, not evidence of duplicated
+raw loading. Exact raw row counts after the repeated report runs, malformed-input
+rejection and controlled failure/retry remain separate cloud checks.
+
 ## Tests and evidence
 
 [test_databricks_input_checks.py](../tests/test_databricks_input_checks.py) contains
@@ -233,10 +278,10 @@ Run all 27 portable Databricks checks without a Databricks account or PostgreSQL
 The test loader extracts imports and function definitions from the source
 notebook without running its top-level Spark cells. These tests do not execute
 Delta `MERGE` or prove cloud execution. The cloud evidence for this checkpoint
-includes the manually verified first load, repeat, Silver preparation,
-initial validation and first Gold package save/read-back. Portable tests
-do not establish updated-snapshot, multi-run retention or failure-recovery
-behavior in Databricks. The existing CI runs the portable
+includes the first load/repeat, initial Silver/Gold path, updated Bronze
+load, updated processing and saved-summary retention across three runs.
+Portable tests remain separate from this observed cloud evidence; cloud
+malformed-input and controlled failure/retry checks are not yet established. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
 `databricks-extension` does not itself trigger the current push workflow.
 
@@ -253,12 +298,14 @@ tests as part of Python discovery on pull requests to `main`; the branch name
 - The notebook captures each small file in its Python process. This preserves
   record positions and ties fingerprints to the exact parsed bytes, but is not
   distributed large-file ingestion or a scale benchmark.
-- Updated snapshot loading, live malformed-file rejection, retention across
-  multiple saved report runs and changed inputs still need cloud verification. The portable checks cover formats and
+- Updated loading and saved-summary retention across changed inputs and
+  repeated Gold runs are cloud-verified. Live malformed-file rejection,
+  raw-history count checks after repeated reporting and controlled partial-load
+  failure/retry still need cloud verification. The portable checks cover formats and
   identity, SQL rule semantics and batch isolation in the local adapter;
   they do not establish those additional cloud execution paths.
-- The initial Bronze-to-Gold path, including one complete result package, is
-  cloud-verified. A parameterised Databricks job remains to be implemented.
+- Initial and updated Bronze-to-Gold processing with retained report
+  summaries is cloud-verified. A parameterised Databricks job remains to be implemented.
   The PostgreSQL/dbt version remains the complete regression reference.
 - The port preserves the original rule scope: no additional bank-currency,
   duplicate-bank, fee-arithmetic or unknown-status rules. A NULL currency
