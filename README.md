@@ -48,8 +48,11 @@ beträgt 25 %. Die Ergebniskopie wurde vollständig zurückgelesen und vergliche
 Am 20. Oktober 2026 wurde auch der aktualisierte Snapshot in Databricks
 geprüft: 2 gültige Payment-IDs, 3 Prüfmeldungen und 50 %. Die gespeicherte
 Übersicht enthält weiterhin das erste Ergebnis mit 25 % sowie zwei separate
-Läufe für den aktualisierten Snapshot. Fehlerwiederaufnahme, die Cloud-Prüfung
-fehlerhafter Eingaben und Jobs stehen noch aus.
+Läufe für den aktualisierten Snapshot. Auch die fehlerhafte Bankdatei wurde
+in Databricks vor der Beladung abgelehnt. Ein Vorher-Nachher-Vergleich der
+gespeicherten Datensätze bestätigt unveränderte Batch-Metadaten, Rohhistorien
+und Ergebnisdaten. Ein kontrollierter Teilabbruch mit Wiederaufnahme und
+Jobs stehen noch aus.
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss

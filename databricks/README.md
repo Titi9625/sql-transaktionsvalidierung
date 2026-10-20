@@ -19,6 +19,8 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | Initial Gold report (19 October 2026) | Checked report saved and fully read back; one saved run for the initial batch |
 | Updated Bronze load (20 October 2026) | New ready batch; 5 payment rows and 4 bank rows added |
 | Saved report comparison (20 October 2026) | Initial run 1 valid / 4 findings / 25%; two updated runs each 2 / 3 / 50% |
+| Malformed-input rejection (20 October 2026) | Expected bank-row-4 amount error; registry, raw-history and saved-report contents unchanged |
+| Source-history counts after report reruns | Initial batch 5 payment / 3 bank; updated batch 5 / 4 |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -59,7 +61,11 @@ processing; Delta tables persist the loaded records.
 | [04_report_gold.py](notebooks/04_report_gold.py) | Create summary/daily views; check and append a complete report package; expose saved results and verify full read-back. |
 | [05_inspect_saved_history.py](notebooks/05_inspect_saved_history.py) | Read-only inspection of saved reports; does not load inputs or create a report run. |
 
-These are Databricks Python source notebooks. `# COMMAND ----------` separates
+[check_malformed_input_cell.py](checks/check_malformed_input_cell.py) is a
+separate check-cell fragment. Run it at the bottom of notebook 01 after its
+existing four cells; it reuses that notebook session's actual loader.
+
+The numbered files are Databricks Python source notebooks. `# COMMAND ----------` separates
 cells. Import them as notebooks; they use Databricks-provided `spark` and
 `display` objects and are not standalone local Python programs.
 
@@ -242,8 +248,43 @@ Observed on 20 October 2026:
 
 These are two deliveries and three saved reports. Repeated Gold execution does
 not call the CSV loader. The extra report is expected, not evidence of duplicated
-raw loading. Exact raw row counts after the repeated report runs, malformed-input
-rejection and controlled failure/retry remain separate cloud checks.
+raw loading. The subsequent malformed-input check confirmed exact initial
+and updated source-history counts of 5/3 and 5/4. Controlled partial-load
+failure/retry remains a separate pending cloud check.
+
+## Malformed-input rejection without stored-data changes
+
+On 20 October 2026 the user executed
+[check_malformed_input_cell.py](checks/check_malformed_input_cell.py) in notebook
+01. The bank file's fourth data record contains `NOT_A_NUMBER` as its amount.
+The actual loader rejected it with the expected format error before loading.
+[User-reported execution output](evidence/malformed_input_output.txt).
+
+To reproduce:
+
+1. Upload both `testdaten/batch_scenarios/03_broken_format/` files to
+   `/Volumes/workspace/reconciliation_bronze/incoming_files/03_broken_format/`.
+2. Keep notebook 01's two active input paths set to `02_updated`. Run its existing
+   four cells: the already-loaded updated pair adds 0/0 rows. This defines the
+   actual capture and loader functions in that notebook's current session.
+3. Add a new Python cell at the bottom of the same notebook and paste the check
+   fragment there. Run that new cell without another concurrent loader or writer.
+   The fragment selects the broken pair separately; it does not replace the active
+   source paths or import code.
+
+The check verifies initial/updated source-history counts of 5/3 and 5/4. It then
+captures row counts, per-batch counts and SHA-256 fingerprints of sorted complete
+stored records before and after calling the real loader with the broken pair.
+The compared physical tables are Bronze `ingestion_batches`, `raw_payment_history`,
+`raw_bank_history` and Gold `validation_run_history`. The comparison includes
+the nested saved report contents, not merely total row counts. The exact expected
+ValueError must occur, and every stored-data signature must remain equal.
+
+Pair IDs are reproduced from the uploaded bytes, preserving the real line-ending
+identity. The check is bounded to 1,000 stored rows per table, assumes serial
+access, and does not establish administrative/table-metadata immutability or
+concurrent snapshot isolation. No cleanup is performed. This checks a format
+rejection before loading, not recovery after a write partially succeeded.
 
 ## Tests and evidence
 
@@ -280,8 +321,10 @@ notebook without running its top-level Spark cells. These tests do not execute
 Delta `MERGE` or prove cloud execution. The cloud evidence for this checkpoint
 includes the first load/repeat, initial Silver/Gold path, updated Bronze
 load, updated processing and saved-summary retention across three runs.
-Portable tests remain separate from this observed cloud evidence; cloud
-malformed-input and controlled failure/retry checks are not yet established. The existing CI runs the portable
+Portable tests remain separate from this observed cloud evidence. The
+user-reported malformed-input output also confirms unchanged stored records
+and exact source-history counts. Controlled partial-load failure/retry is
+not yet established. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
 `databricks-extension` does not itself trigger the current push workflow.
 
@@ -298,10 +341,9 @@ tests as part of Python discovery on pull requests to `main`; the branch name
 - The notebook captures each small file in its Python process. This preserves
   record positions and ties fingerprints to the exact parsed bytes, but is not
   distributed large-file ingestion or a scale benchmark.
-- Updated loading and saved-summary retention across changed inputs and
-  repeated Gold runs are cloud-verified. Live malformed-file rejection,
-  raw-history count checks after repeated reporting and controlled partial-load
-  failure/retry still need cloud verification. The portable checks cover formats and
+- Updated loading, saved-summary retention, exact initial/updated raw counts
+  and malformed-file rejection with unchanged stored records are cloud-verified.
+  Controlled partial-load failure/retry still needs cloud verification. The portable checks cover formats and
   identity, SQL rule semantics and batch isolation in the local adapter;
   they do not establish those additional cloud execution paths.
 - Initial and updated Bronze-to-Gold processing with retained report
