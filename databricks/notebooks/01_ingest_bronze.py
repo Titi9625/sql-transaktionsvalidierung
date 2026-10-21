@@ -1,11 +1,29 @@
 # Databricks notebook source
+# Job parameters: values supplied by a job, or entered above the notebook.
+
+def parse_input_folder(value):
+    """Accept a delivery folder inside this project's existing input volume."""
+    folder = value.strip().rstrip("/")
+    root = "/Volumes/workspace/reconciliation_bronze/incoming_files"
+    if (not folder.startswith(root + "/")
+            or any(part in {".", "..", ""} for part in folder[len(root) + 1:].split("/"))
+            or "\\" in folder or any(ord(char) < 32 for char in folder)):
+        raise ValueError("input_folder must be a delivery directory inside " + root)
+    return folder
+
+dbutils.widgets.text("input_folder",
+    "/Volumes/workspace/reconciliation_bronze/incoming_files/01_initial", "CSV delivery folder")
+configured_input_folder = parse_input_folder(dbutils.widgets.get("input_folder"))
+
+# END JOB PARAMETERS
+
 # Cell 1 - Read and preview the initial CSV pair.
 # Aim: verify the uploaded paths, source columns and row counts before writing tables.
 # Expected for the 01_initial fixture: 5 payment rows and 3 bank rows.
 # This cell performs no table writes and does not implement the business rules
 # or the complete strict CSV contract used by the PostgreSQL implementation.
 
-input_folder = "/Volumes/workspace/reconciliation_bronze/incoming_files/01_initial"
+input_folder = configured_input_folder
 
 # Read each file separately, using the first line as column names.
 # Preserve values as strings during this raw-input preview.
@@ -103,7 +121,7 @@ import io
 import json
 from pathlib import Path
 
-input_folder = Path("/Volumes/workspace/reconciliation_bronze/incoming_files/01_initial")
+input_folder = Path(configured_input_folder)
 bronze = "workspace.reconciliation_bronze"
 
 
@@ -343,3 +361,7 @@ display(spark.sql("""
     FROM workspace.reconciliation_bronze.ingestion_batches
     WHERE batch_id=:batch
 """, args={"batch": batch_id}))
+
+# Publish only after loading and verification succeeded. In interactive runs
+# taskValues.set has no job to update; in a job it passes the exact ID onward.
+dbutils.jobs.taskValues.set(key="batch_id", value=load_result["batch_id"])

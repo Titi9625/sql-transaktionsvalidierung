@@ -6,7 +6,7 @@ synthetic payment-provider and bank exports.
 
 ## Current checkpoint: initial and updated snapshots with saved history
 
-Verified interactively in Databricks Free Edition on serverless compute:
+Observed in Databricks Free Edition on serverless compute (interactive notebook checks through 20 October; first Jobs run on 21 October):
 
 | Check | Observed result |
 |---|---|
@@ -22,6 +22,7 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | Malformed-input rejection (20 October 2026) | Expected bank-row-4 amount error; registry, raw-history and saved-report contents unchanged |
 | Source-history counts after report reruns | Initial batch 5 payment / 3 bank; updated batch 5 / 4 |
 | Isolated controlled recovery (20 October 2026) | Stop at 5/0, failed; retry adds 0/3 and becomes ready; completed repeat adds 0/0 |
+| First four-task Jobs run (21 October 2026) | All four tasks succeeded (user-reported); report screenshot confirms 2 accepted IDs, 3 findings, 50% and EUR 147 accepted net; ingestion output reports 0/0 added rows |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -51,13 +52,35 @@ The source file, dataset/DataFrame and Delta table have different roles:
 uploaded CSVs are the original files; DataFrames describe data used during
 processing; Delta tables persist the loaded records.
 
+## First four-task Jobs run (21 October 2026)
+
+Notebooks 01-04 now accept job parameters. Loading publishes the exact batch ID;
+preparation, validation and reporting require that same ready ID. They reject an
+empty/unresolved ID rather than selecting whichever delivery happens to be newest.
+See [the four-task job setup](jobs/README.md). The first updated-example run
+completed using `Ingest -> prepare -> validate -> report`. The report task
+screenshot shows success, resolved parameters, saved report ID, 2 accepted
+payment IDs, 3 findings, 50.00% and EUR 147.00 accepted net. The learner
+reported all four tasks succeeded and ingestion reused the existing delivery
+with 0/0 added source rows. [Report screenshot](evidence/job_report_updated.png)
+and [first-run evidence record](evidence/job_first_run.txt). A second Jobs run,
+an alternate selected batch and malformed-input failure propagation remain
+pending; earlier manual recovery/repeat checks do not replace those job checks.
+
+The business-rule SQL, loader functions and Gold package checks are unchanged.
+For interactive use of these updated files, set the `input_folder` field in 01,
+copy its printed batch ID into the `batch_id` field in each of 02-04, and set
+`expected_scenario` in 03/04 to `01_initial`, `02_updated`, or `none` for other files.
+Jobs fill these fields automatically. Import clean copies into a separate folder;
+do not schedule a practice notebook with appended failure-check cells.
+
 ## Source notebooks and execution order
 
 | File | Cells and purpose |
 |---|---|
 | [00_setup_payment_reconciliation.py](notebooks/00_setup_payment_reconciliation.py) | Inspect the environment; create schemas and a managed input-file volume. |
 | [01_ingest_bronze.py](notebooks/01_ingest_bronze.py) | 1: preview inputs; 2: create tables; 3: prepare the pair; 4: validate formats and load Bronze. |
-| [02_prepare_silver.py](notebooks/02_prepare_silver.py) | Create two persistent preparation views; preview the latest ready batch and check counts/types. |
+| [02_prepare_silver.py](notebooks/02_prepare_silver.py) | Create two persistent preparation views; preview the explicitly selected ready batch and check counts/types. |
 | [03_validate_silver.py](notebooks/03_validate_silver.py) | Apply nine business rules in two views; display results and check expected example IDs/error codes. |
 | [04_report_gold.py](notebooks/04_report_gold.py) | Create summary/daily views; check and append a complete report package; expose saved results and verify full read-back. |
 | [05_inspect_saved_history.py](notebooks/05_inspect_saved_history.py) | Read-only inspection of saved reports; does not load inputs or create a report run. |
@@ -114,7 +137,7 @@ and `source_row_number`, and leave Bronze unchanged. They retain duplicates,
 pending payments and differences for the later business rules. Future joins
 and duplicate checks must include batch ID to avoid mixing snapshots.
 
-The preview selects the latest ready batch. Its initial cloud execution
+The updated preview requires an explicit ready batch ID. The earlier initial cloud execution
 confirmed `txn_101` net/bank 98.00, both `txn_103` source positions,
 `txn_102` still pending, and `txn_104` net 29.00 versus bank 28.95.
 The notebook's count and date/decimal-type checks also passed.
@@ -144,9 +167,9 @@ Four findings concern three distinct payment IDs. Matching a reference
 alone does not establish validity. Pending and refund are reporting
 exceptions within this scenario, not proof of an erroneous economic event.
 
-The preview selects the latest ready delivery. The final notebook cell uses
-`expected_scenario = "01_initial"`; change it to `"02_updated"` for that
-fixture or `None` for your own data. The label chooses expected answers,
+The preview requires an explicit ready delivery ID. Set the `expected_scenario`
+parameter to `01_initial`, `02_updated` or `none` for other files.
+The label chooses expected answers,
 not input files or the batch to validate. Views return current results;
 `detected_at` is computed during live queries. Gold captures and stores
 those values together with the other results.
@@ -229,15 +252,14 @@ To reproduce after the initial run:
 
 1. Create `02_updated` inside the existing `incoming_files` volume and upload
    both files from `testdaten/batch_scenarios/02_updated/`.
-2. In notebook 01, change both input paths (Cell 1 preview and Cell 3 capture)
-   from `01_initial` to `02_updated`. Run all four cells. Expect 5/4 new rows
-   and ready status on the first load. [Observed updated load](evidence/updated_bronze.png).
-   The repository keeps its initial-default paths so the first-run instructions
-   remain reproducible; these are manual scenario-selection steps for now.
-3. The existing Silver views already include new ready batches. In notebook 03
-   set `expected_scenario = "02_updated"` and run it. Expect 2 valid rows,
-   3 findings and a passed scenario check.
-4. In notebook 04 set the same expected scenario and run it. Expect a new saved
+2. In notebook 01, set the `input_folder` field to
+   `/Volumes/workspace/reconciliation_bronze/incoming_files/02_updated` and run
+   all four cells. Expect 5/4 new rows and ready status on the first load.
+   [Earlier observed updated load](evidence/updated_bronze.png).
+3. Copy that printed batch ID into the `batch_id` field of notebooks 02-04.
+   In 03 and 04 set `expected_scenario` to `02_updated`; run 02 then 03.
+   Expect 2 valid rows, 3 findings and a passed scenario check in 03.
+4. Run notebook 04 for that same ID/scenario. Expect a new saved
    report with 50.00% pass rate. Repeating Gold creates another report run.
 5. Run notebook 05, or paste its source into a new Python cell. It only reads
    saved summaries. [Observed comparison](evidence/report_history_comparison.png).
@@ -366,7 +388,7 @@ DataFrame argument preservation and exactly one blocked bank write. Their
 recording delegate does not execute Spark/Delta; the native recovery evidence
 above is a separate manually executed integration check.
 
-Run all 33 portable Databricks checks without a Databricks account or PostgreSQL connection:
+Run all 41 portable Databricks checks without a Databricks account or PostgreSQL connection:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_databricks_*.py" -v
@@ -382,7 +404,11 @@ user-reported malformed-input output also confirms unchanged stored records
 and exact source-history counts. Controlled driver interruption and serial
 recovery were also verified on native Delta test tables using the real loader. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
-`databricks-extension` does not itself trigger the current push workflow.
+`databricks-extension` now also triggers the push workflow (once this change is pushed).
+
+Eight additional portable job-parameter tests verify exact delivery selection,
+input-directory guards and missing/unresolved values before stage writes.
+They do not establish cloud task-value resolution or successful Job execution.
 
 ## Boundaries and remaining work
 
@@ -405,7 +431,9 @@ tests as part of Python discovery on pull requests to `main`; the branch name
   identity, SQL rule semantics and batch isolation in the local adapter;
   they do not establish those additional cloud execution paths.
 - Initial and updated Bronze-to-Gold processing with retained report
-  summaries is cloud-verified. A parameterised Databricks job remains to be implemented.
+  summaries is cloud-verified. The first parameterised four-task job completed successfully for the updated
+  example. Repeat/alternate-input/failure checks through Jobs and a sanitised
+  export of the actual job settings are still pending.
   The PostgreSQL/dbt version remains the complete regression reference.
 - The port preserves the original rule scope: no additional bank-currency,
   duplicate-bank, fee-arithmetic or unknown-status rules. A NULL currency

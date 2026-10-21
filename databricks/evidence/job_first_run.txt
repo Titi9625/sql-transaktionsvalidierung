@@ -1,0 +1,43 @@
+First four-task Databricks Jobs execution — 21 October 2026
+
+Evidence sources: learner-provided report-task screenshot and pasted ingestion
+output. All-four-success status was reported by the learner. This transcript
+is an evidence summary, not an independently downloaded Databricks backend log.
+
+Environment: Databricks Free Edition; serverless; environment version 6 visible
+in the report screenshot. Job: payment-reconciliation-demo.
+Order: Ingest -> prepare -> validate -> report.
+Job run ID: 569445875628778.
+Scenario parameter resolved: 02_updated.
+Input folder resolved:
+/Volumes/workspace/reconciliation_bronze/incoming_files/02_updated
+
+Learner-provided ingestion output:
+Same delivery already loaded.
+Payment rows added: 0
+Bank rows added: 0
+Status: ready
+
+Report screenshot:
+Task status: Succeeded.
+Gold report checked and saved successfully.
+Delivery ID: 928cceb410a894c9ee04ac9d58c33100e4997d9a23d84b6125d73a5b81f3a27d
+Saved report run ID: 5e5d5e98-9e38-4e97-9b4c-1783dc47d9c6
+Earlier report runs were not overwritten.
+total_bank_records: 4
+distinct_payment_count: 4
+valid_payment_count: 2
+flagged_payment_ids: 2
+finding_rows: 3
+validation_pass_rate_pct: 50.00
+Daily report: duplicate_payment_id_count=1; valid_net_amount_eur=147.00.
+
+Local verification against actual repository files:
+python -m unittest discover -s tests -p "test_databricks_*.py" -v
+Ran 41 tests; OK. Python portable checks do not run Spark, Delta or Jobs.
+
+Still pending at this checkpoint: another complete job run and comparison of
+its batch/report IDs and 0/0 raw-row additions; selecting the initial example
+through Jobs; malformed-input failure and downstream-task skip visibility;
+sanitised export/review of actual job settings, including concurrency/retries.
+Earlier interactive checks are documented separately.

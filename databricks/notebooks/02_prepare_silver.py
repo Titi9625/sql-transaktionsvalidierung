@@ -1,20 +1,35 @@
 # Databricks notebook source
+# Job parameters: values supplied by a job, or entered above the notebook.
+
+def select_ready_delivery(spark, requested_batch_id):
+    """Require this exact ready delivery; never fall back to a different one."""
+    import re
+    label = requested_batch_id.strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", label):
+        raise ValueError("batch_id must be the 64-character delivery ID from Bronze. "
+                         "For jobs use {{tasks.ingest.values.batch_id}} as a task parameter.")
+    rows = spark.sql("""
+        SELECT batch_id, payment_row_count, bank_row_count
+        FROM workspace.reconciliation_bronze.ingestion_batches
+        WHERE batch_id = :batch AND status = 'ready'
+        LIMIT 2
+    """, args={"batch": label}).collect()
+    if len(rows) != 1 or rows[0]["batch_id"] != label:
+        raise ValueError("The selected delivery must have exactly one ready registry row. "
+                         "Complete Bronze loading for this delivery first.")
+    return rows[0]
+
+
+dbutils.widgets.text("batch_id", "", "Delivery ID from Bronze")
+selected_delivery = select_ready_delivery(spark, dbutils.widgets.get("batch_id"))
+
+# END JOB PARAMETERS
+
 # Notebook: 02_prepare_silver | Language: Python
 # Aim: prepare comparable fields from the stored Bronze tables.
 # Creates two persistent SQL views. Does not change Bronze rows or validate payments.
 # Runs independently of notebook 01's Python variables.
 # Only deliveries whose registry status is ready are included.
-
-ready_batches = spark.sql("""
-    SELECT batch_id, payment_row_count, bank_row_count
-    FROM workspace.reconciliation_bronze.ingestion_batches
-    WHERE status = 'ready'
-    ORDER BY loaded_at DESC, batch_id DESC
-    LIMIT 1
-""").collect()
-
-if not ready_batches:
-    raise ValueError("No ready delivery found. Complete the Bronze loading step first.")
 
 spark.sql("""
     CREATE OR REPLACE VIEW workspace.reconciliation_silver.stg_payment_transactions AS
@@ -67,12 +82,11 @@ print("Silver views created. Bronze data unchanged.")
 
 # COMMAND ----------
 
-# Preview the latest ready delivery. The views themselves contain all ready batches.
+# Preview the selected ready delivery. The views themselves contain all ready batches.
 # Expected for 01_initial: 5 payment rows and 3 bank rows.
 # Always retain batch_id when comparing records from multiple deliveries later.
 # matched_transaction_id is a candidate reference, not proof of a valid payment.
 
-selected_delivery = ready_batches[0]
 preview_batch_id = selected_delivery["batch_id"]
 
 silver_payments = spark.sql("""

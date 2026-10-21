@@ -20,7 +20,7 @@ er speist diese CSV-Pipeline nicht.
 | Data Engineering | CSV-Vertrag, SHA-256-Dateipaar-Erkennung, atomare Beladung beider Quellen, Rohdatenhistorie und Pipeline-Runner |
 | Analytics Engineering | Sechs dbt-Views, neun Prüfregeln, dokumentierte Modelle und täglicher Reporting-Mart |
 | Nachvollziehbarkeit | Batch-ID je Eingabepaar, eigene Validierungslauf-ID, gespeicherte Ergebnisse, Code-Fingerprint und dbt-Laufmetadaten |
-| Tests | 94 Python-Tests (davon 33 portable Databricks-Prüfungen); 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
+| Tests | 102 Python-Tests (davon 41 portable Databricks-Prüfungen); 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
 | CI | GitHub Actions mit PostgreSQL 18, ursprünglicher Pipeline, Batch-Wiederholung, aktualisiertem Snapshot und fehlerhafter Datei |
 
 Das Badge zeigt den Stand von `main`. Den tatsächlichen Status eines Branches
@@ -54,7 +54,7 @@ gespeicherten Datensätze bestätigt unveränderte Batch-Metadaten, Rohhistorien
 und Ergebnisdaten. Ein kontrollierter Abbruch nach dem Payment-Import wurde
 anschließend in separaten Delta-Testtabellen geprüft: Wiederaufnahme ergänzt
 nur die drei fehlenden Bankzeilen; ein erneuter Lauf fügt 0/0 Zeilen hinzu.
-Ein parametrisierter Databricks-Job steht noch aus.
+Die Notebooks sind nun für einen parametrisierten Vier-Schritt-Job vorbereitet: Alle Folgeschritte wählen explizit dieselbe Batch-ID. Am 21. Oktober 2026 lief der Vier-Schritt-Job in Databricks Free Edition erfolgreich: 0/0 zusätzliche Rohzeilen und eine gespeicherte Auswertung mit 2 gültigen Payment-IDs, 3 Prüfmeldungen, 50 % und 147,00 EUR akzeptiertem Netto. [Job-Ergebnis](databricks/evidence/job_report_updated.png). Wiederholung und fehlerhafter Input im Job sind noch separat zu prüfen; Einrichtung siehe [`databricks/jobs`](databricks/jobs/README.md).
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss
@@ -233,13 +233,16 @@ Die ursprünglichen Importer ersetzen ihre Rohdatentabellen getrennt mit
 `TRUNCATE`/`INSERT` und protokollieren in `import_runs`. Sie verändern die
 neuen Batch-Historientabellen nicht.
 
-Die Python-Suite enthält 94 Tests: 61 für den bisherigen Projektstand, sieben
+Die Python-Suite enthält 102 Tests: 61 für den bisherigen Projektstand, sieben
 portable Prüfungen der Databricks-Eingabelogik und neun Prüfungen der
 Validierungs-SQL mit einem SQLite-Adapter und exakten Cent-Beträgen. Elf
 weitere portable Tests prüfen Gold-Kennzahlen und Ergebniskonsistenz; sie
 führen keine Spark-Abfragen oder Delta-Schreiboperationen aus. Sechs weitere
 Tests prüfen die sichere Tabellenumleitung und die einmalige Fehlerauslösung
 des isolierten Wiederaufnahmetests; sie emulieren keine Delta-Schreibvorgänge.
+Acht weitere portable Tests prüfen Job-Parameter, explizite Batch-Auswahl
+und die Ablehnung fehlender oder ungültiger IDs vor den Verarbeitungsschritten.
+Sie ersetzen keinen nativen Databricks-Joblauf.
 Zwei ursprüngliche Integrationstests prüfen
 Rollback und Fehlerprotokollierung in PostgreSQL. Weitere Tests prüfen Parser,
 Fingerprints, Batch-Isolation, gespeicherte Ergebnisse und Runner-Verhalten;

@@ -1,4 +1,42 @@
 # Databricks notebook source
+# Job parameters: values supplied by a job, or entered above the notebook.
+
+def select_ready_delivery(spark, requested_batch_id):
+    """Require this exact ready delivery; never fall back to a different one."""
+    import re
+    label = requested_batch_id.strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", label):
+        raise ValueError("batch_id must be the 64-character delivery ID from Bronze. "
+                         "For jobs use {{tasks.ingest.values.batch_id}} as a task parameter.")
+    rows = spark.sql("""
+        SELECT batch_id, payment_row_count, bank_row_count
+        FROM workspace.reconciliation_bronze.ingestion_batches
+        WHERE batch_id = :batch AND status = 'ready'
+        LIMIT 2
+    """, args={"batch": label}).collect()
+    if len(rows) != 1 or rows[0]["batch_id"] != label:
+        raise ValueError("The selected delivery must have exactly one ready registry row. "
+                         "Complete Bronze loading for this delivery first.")
+    return rows[0]
+
+
+def parse_expected_scenario(value):
+    label = value.strip()
+    if label == "none":
+        return None
+    if label not in {"01_initial", "02_updated"}:
+        raise ValueError("expected_scenario must be 01_initial, 02_updated or none.")
+    return label
+
+dbutils.widgets.text("expected_scenario", "01_initial", "Example expectations")
+expected_scenario = parse_expected_scenario(dbutils.widgets.get("expected_scenario"))
+
+dbutils.widgets.text("batch_id", "", "Delivery ID from Bronze")
+selected_delivery = select_ready_delivery(spark, dbutils.widgets.get("batch_id"))
+report_batch_id = selected_delivery["batch_id"]
+
+# END JOB PARAMETERS
+
 # Notebook: 04_report_gold | Python | Databricks Free Edition / serverless
 # Aim: report the Silver validation results and save each checked result package.
 # Creates two live reporting views, one Delta history table and four saved-result views.
@@ -192,15 +230,8 @@ def check_report_package(package, expected_scenario=None):
 spark.sql("CREATE OR REPLACE VIEW workspace.reconciliation_gold.validation_summary AS " + summary_sql)
 spark.sql("CREATE OR REPLACE VIEW workspace.reconciliation_gold.mart_daily_reconciliation AS " + daily_sql)
 
-# Use None for your own files; this label selects expected answers, not a batch.
-expected_scenario = "01_initial"
-ready = spark.sql("""
-    SELECT batch_id FROM workspace.reconciliation_bronze.ingestion_batches
-    WHERE status = 'ready' ORDER BY loaded_at DESC, batch_id DESC LIMIT 1
-""").collect()
-if not ready:
-    raise ValueError("No ready delivery found. Complete Bronze and Silver first.")
-report_batch_id = ready[0]["batch_id"]
+# Use the parameter none for your own files; it selects no fixed example answers.
+# expected_scenario is read from the notebook/job parameter above.
 
 definitions = {}
 for name in (
@@ -306,3 +337,7 @@ display(spark.sql("""
 """, args={"run": saved_run_id}))
 print("Saved runs for this delivery:",
       spark.table(history).where(F.col("batch_id") == report_batch_id).count())
+
+# Publish the report ID only after complete saved-package read-back succeeded.
+dbutils.jobs.taskValues.set(key="validation_run_id", value=saved_run_id)
+dbutils.jobs.taskValues.set(key="batch_id", value=report_batch_id)

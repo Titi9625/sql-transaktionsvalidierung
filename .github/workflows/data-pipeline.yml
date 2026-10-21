@@ -2,7 +2,7 @@ name: Data pipeline checks
 
 "on":
   push:
-    branches: [main, portfolio-improvements, analytics-reporting, batch-ingestion]
+    branches: [main, portfolio-improvements, analytics-reporting, batch-ingestion, databricks-extension]
   pull_request:
     branches: [main]
   workflow_dispatch:
