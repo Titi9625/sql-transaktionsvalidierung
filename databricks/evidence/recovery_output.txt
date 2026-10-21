@@ -1,0 +1,15 @@
+User-reported Databricks execution output, 20 October 2026.
+Check: check_recovery_cell.py, executed in notebook 01_ingest_bronze.
+This is supplied stdout, not an independently captured backend log.
+
+Simulated stop: bank write deliberately blocked.
+After stop: status=failed, payment rows=5, bank rows=0.
+Retry: status=ready, payment rows added=0, bank rows added=3.
+Repeat: payment rows added=0, bank rows added=0.
+PASS: original payment rows preserved during retry.
+PASS: recovered test delivery is complete and repeatable.
+PASS: working Bronze data and saved report contents unchanged.
+Recovery evidence tables:
+workspace.reconciliation_checks.ingestion_batches_ce913a9a1522
+workspace.reconciliation_checks.raw_payment_history_ce913a9a1522
+workspace.reconciliation_checks.raw_bank_history_ce913a9a1522

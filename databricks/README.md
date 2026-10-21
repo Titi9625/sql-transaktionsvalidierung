@@ -21,6 +21,7 @@ Verified interactively in Databricks Free Edition on serverless compute:
 | Saved report comparison (20 October 2026) | Initial run 1 valid / 4 findings / 25%; two updated runs each 2 / 3 / 50% |
 | Malformed-input rejection (20 October 2026) | Expected bank-row-4 amount error; registry, raw-history and saved-report contents unchanged |
 | Source-history counts after report reruns | Initial batch 5 payment / 3 bank; updated batch 5 / 4 |
+| Isolated controlled recovery (20 October 2026) | Stop at 5/0, failed; retry adds 0/3 and becomes ready; completed repeat adds 0/0 |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -64,6 +65,9 @@ processing; Delta tables persist the loaded records.
 [check_malformed_input_cell.py](checks/check_malformed_input_cell.py) is a
 separate check-cell fragment. Run it at the bottom of notebook 01 after its
 existing four cells; it reuses that notebook session's actual loader.
+[check_recovery_cell.py](checks/check_recovery_cell.py) is another cell
+fragment for notebook 01. It runs that same loader against fresh isolated
+Delta tables and checks controlled interruption, retry and repeat behavior.
 
 The numbered files are Databricks Python source notebooks. `# COMMAND ----------` separates
 cells. Import them as notebooks; they use Databricks-provided `spark` and
@@ -250,7 +254,7 @@ These are two deliveries and three saved reports. Repeated Gold execution does
 not call the CSV loader. The extra report is expected, not evidence of duplicated
 raw loading. The subsequent malformed-input check confirmed exact initial
 and updated source-history counts of 5/3 and 5/4. Controlled partial-load
-failure/retry remains a separate pending cloud check.
+recovery was subsequently verified in separate Delta test tables, as described below.
 
 ## Malformed-input rejection without stored-data changes
 
@@ -286,6 +290,51 @@ access, and does not establish administrative/table-metadata immutability or
 concurrent snapshot isolation. No cleanup is performed. This checks a format
 rejection before loading, not recovery after a write partially succeeded.
 
+## Controlled partial-load recovery in isolated Delta tables
+
+On 20 October 2026 the user executed
+[check_recovery_cell.py](checks/check_recovery_cell.py) at the bottom of notebook
+01. [User-reported native execution output](evidence/recovery_output.txt).
+
+| Stage | Stored payments | Stored bank rows | Registry state |
+|---|---|---|---|
+| Deliberate interruption before bank MERGE | 5 | 0 | failed |
+| Serial retry | 5 | 3 | ready; 0 payment / 3 bank rows added |
+| Completed repeat | 5 | 3 | ready; 0/0 rows added |
+
+The check calls the existing `load_bronze_pair` function without changing its
+body. A `RecoverySparkProxy` routes the three physical table names to fresh
+tables in `workspace.reconciliation_checks` and raises one deliberate driver
+exception before dispatching the bank MERGE. The real loader's handler must
+record failed status, no loaded timestamp and the error type. Both actual
+DataFrame operations and permitted SQL writes execute on native Spark/Delta.
+
+The retry must preserve the five stored payment records, including their import
+timestamps, add the three missing bank positions, clear the failure metadata and
+mark ready only after checking both sources. A completed repeat must preserve
+all isolated source/registry contents. Full before/after stored-record signatures
+also verify that the working Bronze registry/histories and Gold report-history
+contents were unchanged during this isolated check.
+
+To reproduce, keep notebook 01's active paths at `02_updated` and run its existing
+cells. Then paste the recovery fragment into a new Python cell and run only that
+cell. It reuses the uploaded `01_initial` CSVs and creates three empty-schema test
+tables with a shared random suffix. Write mode `error` is used for serverless
+compatibility and fails if a generated target already exists. No additional
+CSV upload or working-table overwrite is needed. Test tables remain as evidence;
+rerunning creates a fresh set rather than deleting previous evidence.
+
+The observed test tables share suffix `ce913a9a1522`:
+
+- `workspace.reconciliation_checks.ingestion_batches_ce913a9a1522`
+- `workspace.reconciliation_checks.raw_payment_history_ce913a9a1522`
+- `workspace.reconciliation_checks.raw_bank_history_ce913a9a1522`
+
+This verifies one controlled driver-exception boundary and serial recovery using
+the real loader on separate Delta targets. It does not prove process-kill,
+storage-outage, concurrency, or distributed-transaction recovery. Comparisons
+are limited to 1,000 stored rows per table and require serial execution.
+
 ## Tests and evidence
 
 [test_databricks_input_checks.py](../tests/test_databricks_input_checks.py) contains
@@ -310,7 +359,14 @@ bank-only findings, rounding, unclassified records, inconsistent packages,
 empty denominators and the size limit. It uses the same integer-cent SQLite
 adapter and does not execute Spark nested schemas or Delta append/read-back.
 
-Run all 27 portable Databricks checks without a Databricks account or PostgreSQL connection:
+[test_databricks_recovery_routing.py](../tests/test_databricks_recovery_routing.py)
+adds six portable tests of the actual recovery adapter classes. They verify
+safe target names, private read/write routing, rejection of unmapped operations,
+DataFrame argument preservation and exactly one blocked bank write. Their
+recording delegate does not execute Spark/Delta; the native recovery evidence
+above is a separate manually executed integration check.
+
+Run all 33 portable Databricks checks without a Databricks account or PostgreSQL connection:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_databricks_*.py" -v
@@ -323,8 +379,8 @@ includes the first load/repeat, initial Silver/Gold path, updated Bronze
 load, updated processing and saved-summary retention across three runs.
 Portable tests remain separate from this observed cloud evidence. The
 user-reported malformed-input output also confirms unchanged stored records
-and exact source-history counts. Controlled partial-load failure/retry is
-not yet established. The existing CI runs the portable
+and exact source-history counts. Controlled driver interruption and serial
+recovery were also verified on native Delta test tables using the real loader. The existing CI runs the portable
 tests as part of Python discovery on pull requests to `main`; the branch name
 `databricks-extension` does not itself trigger the current push workflow.
 
@@ -333,8 +389,9 @@ tests as part of Python discovery on pull requests to `main`; the branch name
 - Delta commits occur per table. This loader does not provide PostgreSQL-style
   rollback across both raw tables and the registry. An incomplete/failed attempt
   may leave partial rows. It is not published as ready; a serial retry inserts
-  missing positions and checks both sources. **Live failure/retry injection is
-  not yet verified.** Silver consumers must select only ready batches.
+  missing positions and checks both sources. Controlled driver-interruption
+  and retry are verified on isolated Delta targets; real outages/concurrency
+  are not established by that check. Silver consumers must select only ready batches.
 - Run one loader at a time. Registry and source keys are checked in code rather
   than protected by enforced unique constraints. Concurrent multi-writer use is
   not supported by this checkpoint.
@@ -343,7 +400,8 @@ tests as part of Python discovery on pull requests to `main`; the branch name
   distributed large-file ingestion or a scale benchmark.
 - Updated loading, saved-summary retention, exact initial/updated raw counts
   and malformed-file rejection with unchanged stored records are cloud-verified.
-  Controlled partial-load failure/retry still needs cloud verification. The portable checks cover formats and
+  Controlled partial-load recovery and completed-repeat behavior are also
+  verified in isolated Delta targets. The portable checks cover formats and
   identity, SQL rule semantics and batch isolation in the local adapter;
   they do not establish those additional cloud execution paths.
 - Initial and updated Bronze-to-Gold processing with retained report

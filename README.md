@@ -20,7 +20,7 @@ er speist diese CSV-Pipeline nicht.
 | Data Engineering | CSV-Vertrag, SHA-256-Dateipaar-Erkennung, atomare Beladung beider Quellen, Rohdatenhistorie und Pipeline-Runner |
 | Analytics Engineering | Sechs dbt-Views, neun Prüfregeln, dokumentierte Modelle und täglicher Reporting-Mart |
 | Nachvollziehbarkeit | Batch-ID je Eingabepaar, eigene Validierungslauf-ID, gespeicherte Ergebnisse, Code-Fingerprint und dbt-Laufmetadaten |
-| Tests | 88 Python-Tests (davon 27 portable Databricks-Prüfungen); 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
+| Tests | 94 Python-Tests (davon 33 portable Databricks-Prüfungen); 28 dbt-Datentests im ursprünglichen Modus, 30 bei benannten Batch-Testfällen |
 | CI | GitHub Actions mit PostgreSQL 18, ursprünglicher Pipeline, Batch-Wiederholung, aktualisiertem Snapshot und fehlerhafter Datei |
 
 Das Badge zeigt den Stand von `main`. Den tatsächlichen Status eines Branches
@@ -51,8 +51,10 @@ geprüft: 2 gültige Payment-IDs, 3 Prüfmeldungen und 50 %. Die gespeicherte
 Läufe für den aktualisierten Snapshot. Auch die fehlerhafte Bankdatei wurde
 in Databricks vor der Beladung abgelehnt. Ein Vorher-Nachher-Vergleich der
 gespeicherten Datensätze bestätigt unveränderte Batch-Metadaten, Rohhistorien
-und Ergebnisdaten. Ein kontrollierter Teilabbruch mit Wiederaufnahme und
-Jobs stehen noch aus.
+und Ergebnisdaten. Ein kontrollierter Abbruch nach dem Payment-Import wurde
+anschließend in separaten Delta-Testtabellen geprüft: Wiederaufnahme ergänzt
+nur die drei fehlenden Bankzeilen; ein erneuter Lauf fügt 0/0 Zeilen hinzu.
+Ein parametrisierter Databricks-Job steht noch aus.
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss
@@ -231,11 +233,14 @@ Die ursprünglichen Importer ersetzen ihre Rohdatentabellen getrennt mit
 `TRUNCATE`/`INSERT` und protokollieren in `import_runs`. Sie verändern die
 neuen Batch-Historientabellen nicht.
 
-Die Python-Suite enthält 88 Tests: 61 für den bisherigen Projektstand, sieben
+Die Python-Suite enthält 94 Tests: 61 für den bisherigen Projektstand, sieben
 portable Prüfungen der Databricks-Eingabelogik und neun Prüfungen der
 Validierungs-SQL mit einem SQLite-Adapter und exakten Cent-Beträgen. Elf
 weitere portable Tests prüfen Gold-Kennzahlen und Ergebniskonsistenz; sie
-führen keine Spark-Abfragen oder Delta-Schreiboperationen aus. Zwei ursprüngliche Integrationstests prüfen
+führen keine Spark-Abfragen oder Delta-Schreiboperationen aus. Sechs weitere
+Tests prüfen die sichere Tabellenumleitung und die einmalige Fehlerauslösung
+des isolierten Wiederaufnahmetests; sie emulieren keine Delta-Schreibvorgänge.
+Zwei ursprüngliche Integrationstests prüfen
 Rollback und Fehlerprotokollierung in PostgreSQL. Weitere Tests prüfen Parser,
 Fingerprints, Batch-Isolation, gespeicherte Ergebnisse und Runner-Verhalten;
 ihre Datenbankadapter verwenden SQLite. Sie beweisen keine PostgreSQL-Sperr-
