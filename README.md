@@ -28,6 +28,8 @@ oder Pull Requests zeigt [GitHub Actions](https://github.com/Titi9625/sql-transa
 
 ## Databricks-Erweiterung (in Entwicklung)
 
+[Drei-Minuten-Projektueberblick mit einem konkreten Zahlungsbeispiel](databricks/DEMO.md).
+
 Eine zweite Umsetzung mit **Databricks Free Edition, PySpark, SQL und Delta Lake**
 liegt in [`databricks/`](databricks/README.md). Bronze erhält Quelldaten je
 Dateipaar; Silver vereinheitlicht die Felder und wendet die neun Regeln an.
