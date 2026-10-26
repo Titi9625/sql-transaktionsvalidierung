@@ -6,7 +6,7 @@ synthetic payment-provider and bank exports.
 
 ## Current checkpoint: initial and updated snapshots with saved history
 
-Observed in Databricks Free Edition on serverless compute (interactive notebook checks through 20 October; first Jobs run on 21 October):
+Observed in Databricks Free Edition on serverless compute (interactive notebook checks through 20 October; first Jobs run on 21 October, repeat on 23 October and initial selection observed 25 October):
 
 | Check | Observed result |
 |---|---|
@@ -23,6 +23,8 @@ Observed in Databricks Free Edition on serverless compute (interactive notebook 
 | Source-history counts after report reruns | Initial batch 5 payment / 3 bank; updated batch 5 / 4 |
 | Isolated controlled recovery (20 October 2026) | Stop at 5/0, failed; retry adds 0/3 and becomes ready; completed repeat adds 0/0 |
 | First four-task Jobs run (21 October 2026) | All four tasks succeeded (user-reported); report screenshot confirms 2 accepted IDs, 3 findings, 50% and EUR 147 accepted net; ingestion output reports 0/0 added rows |
+| Repeat job (23 October 2026) | New job run; Ingest succeeds with 0/0 added rows; report succeeds with a new UUID, same results and four saved runs |
+| Initial selection through Jobs (observed 25 October 2026) | Correct older input selected; 0/0 added rows, source counts 5/3, new report with 1 accepted ID / 4 findings / 25% / EUR 98 |
 
 `txn_103` remains two separate source records (positions 3 and 4). The loader
 identifies a stored source record by its batch ID and source record position,
@@ -63,9 +65,20 @@ screenshot shows success, resolved parameters, saved report ID, 2 accepted
 payment IDs, 3 findings, 50.00% and EUR 147.00 accepted net. The learner
 reported all four tasks succeeded and ingestion reused the existing delivery
 with 0/0 added source rows. [Report screenshot](evidence/job_report_updated.png)
-and [first-run evidence record](evidence/job_first_run.txt). A second Jobs run,
-an alternate selected batch and malformed-input failure propagation remain
-pending; earlier manual recovery/repeat checks do not replace those job checks.
+and [first-run evidence record](evidence/job_first_run.txt). A distinct repeat
+job was verified on 23 October: Ingest added 0/0 rows and report saved a new UUID
+with the same 2 accepted IDs, 3 findings, 50.00% and EUR 147.00. The saved report
+count is four. [Repeat-run evidence](evidence/job_repeat_run.txt). The initial example was then selected explicitly through Jobs (observed 25 October):
+0/0 added rows and a new report with 1 accepted ID, 4 findings, 25.00% and EUR 98.00.
+[Initial-selection evidence](evidence/job_initial_selection.txt). The selected malformed pair also produced the expected numeric-format error
+in the Ingest task (observed 25 October), with a displayed write count of zero.
+[Job error and failed graph](evidence/job_malformed_input_error.txt). The graph
+for that same job run confirms Ingest failed after two attempts and all three
+downstream tasks were `Upstream failed` with zero-second durations. The revised actual JSON export was reviewed on 26 October: one concurrent run,
+correct dependencies/parameters and retries explicitly disabled on all tasks.
+[Sanitised settings](jobs/payment_reconciliation_job.json) and
+[configuration review](evidence/job_configuration_review.txt). Those settings
+were changed after the observed cloud checks; no post-change run is claimed.
 
 The business-rule SQL, loader functions and Gold package checks are unchanged.
 For interactive use of these updated files, set the `input_folder` field in 01,
@@ -403,8 +416,8 @@ Portable tests remain separate from this observed cloud evidence. The
 user-reported malformed-input output also confirms unchanged stored records
 and exact source-history counts. Controlled driver interruption and serial
 recovery were also verified on native Delta test tables using the real loader. The existing CI runs the portable
-tests as part of Python discovery on pull requests to `main`; the branch name
-`databricks-extension` now also triggers the push workflow (once this change is pushed).
+tests as part of Python discovery on pull requests to `main` and pushes to `databricks-extension`. Consult GitHub
+Actions for actual run outcomes; portable CI does not run the native cloud job.
 
 Eight additional portable job-parameter tests verify exact delivery selection,
 input-directory guards and missing/unresolved values before stage writes.
@@ -432,8 +445,10 @@ They do not establish cloud task-value resolution or successful Job execution.
   they do not establish those additional cloud execution paths.
 - Initial and updated Bronze-to-Gold processing with retained report
   summaries is cloud-verified. The first parameterised four-task job completed successfully for the updated
-  example. Repeat/alternate-input/failure checks through Jobs and a sanitised
-  export of the actual job settings are still pending.
+  example. Repeat execution and initial-input selection through Jobs are now verified; malformed-input failure propagation is also verified. Final concurrency/retry settings were reviewed in the revised export on
+  26 October. The sanitised job JSON is included; replace its user-path
+  placeholder before use. It is not a full deployment bundle, and the existing
+  cloud evidence precedes the final retry-policy change.
   The PostgreSQL/dbt version remains the complete regression reference.
 - The port preserves the original rule scope: no additional bank-currency,
   duplicate-bank, fee-arithmetic or unknown-status rules. A NULL currency
@@ -441,3 +456,7 @@ They do not establish cloud task-value resolution or successful Job execution.
   currency before loading. Unknown statuses can produce neither a finding
   nor an accepted payment. Multiple matching bank records can multiply
   joined results. These limits are not silently changed by the port.
+
+Final checkpoint: all 41 portable Databricks checks were rerun successfully
+on 26 October 2026 against the actual repository files. The reviewed job
+settings and manually observed cloud runs remain separate evidence.

@@ -28,33 +28,32 @@ oder Pull Requests zeigt [GitHub Actions](https://github.com/Titi9625/sql-transa
 
 ## Databricks-Erweiterung (in Entwicklung)
 
-Eine zweite Umsetzung mit PySpark, SQL und Delta-Tabellen entsteht in
-[`databricks/`](databricks/README.md). Die initialen Beispieldaten wurden in
-Databricks geladen: 5 Payment- und 3 Bankzeilen. Eine erneute Ausführung fügte
-0 weitere Rohzeilen hinzu. Sieben portable Tests prüfen Eingabeformate und
-Dateipaar-Identität; sie führen keine Delta-Schreiboperationen aus.
-Zwei Silver-Views bereiten geladene Batches für den Vergleich vor: Cent-Beträge
-werden in Euro umgerechnet, Datums- und Währungsfelder vereinheitlicht und
-Bankreferenz-IDs extrahiert. Im initialen Cloud-Test bleiben 5 Payment- und
-3 Bankzeilen einschließlich des doppelten `txn_103` erhalten.
-Die neun fachlichen Regeln sind in zwei weiteren Silver-Views umgesetzt.
-Im initialen Databricks-Test ergeben sich 1 gültige Zahlung und 4 Prüfmeldungen;
-die Prüfung der erwarteten IDs und Fehlercodes war erfolgreich. Neun portable
-SQL-Tests vergleichen die Logik mit den bestehenden dbt-Abfragen; sie ersetzen
-keinen Spark-Test. Gold-Zusammenfassung, Tagesreport und die erste gespeicherte
-Ergebniskopie sind ebenfalls in Databricks geprüft: 4 unterschiedliche
-Payment-IDs, 1 gültige ID, 3 markierte IDs und 4 Prüfmeldungen; die Quote
-beträgt 25 %. Die Ergebniskopie wurde vollständig zurückgelesen und verglichen.
-Am 20. Oktober 2026 wurde auch der aktualisierte Snapshot in Databricks
-geprüft: 2 gültige Payment-IDs, 3 Prüfmeldungen und 50 %. Die gespeicherte
-Übersicht enthält weiterhin das erste Ergebnis mit 25 % sowie zwei separate
-Läufe für den aktualisierten Snapshot. Auch die fehlerhafte Bankdatei wurde
-in Databricks vor der Beladung abgelehnt. Ein Vorher-Nachher-Vergleich der
-gespeicherten Datensätze bestätigt unveränderte Batch-Metadaten, Rohhistorien
-und Ergebnisdaten. Ein kontrollierter Abbruch nach dem Payment-Import wurde
-anschließend in separaten Delta-Testtabellen geprüft: Wiederaufnahme ergänzt
-nur die drei fehlenden Bankzeilen; ein erneuter Lauf fügt 0/0 Zeilen hinzu.
-Die Notebooks sind nun für einen parametrisierten Vier-Schritt-Job vorbereitet: Alle Folgeschritte wählen explizit dieselbe Batch-ID. Am 21. Oktober 2026 lief der Vier-Schritt-Job in Databricks Free Edition erfolgreich: 0/0 zusätzliche Rohzeilen und eine gespeicherte Auswertung mit 2 gültigen Payment-IDs, 3 Prüfmeldungen, 50 % und 147,00 EUR akzeptiertem Netto. [Job-Ergebnis](databricks/evidence/job_report_updated.png). Wiederholung und fehlerhafter Input im Job sind noch separat zu prüfen; Einrichtung siehe [`databricks/jobs`](databricks/jobs/README.md).
+Eine zweite Umsetzung mit **Databricks Free Edition, PySpark, SQL und Delta Lake**
+liegt in [`databricks/`](databricks/README.md). Bronze erhält Quelldaten je
+Dateipaar; Silver vereinheitlicht die Felder und wendet die neun Regeln an.
+Gold speichert geprüfte Ergebnisse und Tageskennzahlen unter eigenen Report-IDs.
+Ein manueller Vier-Schritt-Job führt Import, Aufbereitung, Prüfung und Reporting
+in dieser Reihenfolge aus.
+
+| Cloud-Prüfung | Beobachtetes Ergebnis |
+|---|---|
+| Aktualisierter Input und Wiederholung | 0/0 zusätzliche Rohzeilen, neue Report-ID; 2 gültige IDs, 3 Prüfmeldungen, 50 %, 147,00 EUR akzeptiertes Netto |
+| Gezielte Auswahl des initialen Inputs | 0/0 zusätzliche Rohzeilen; 1 gültige ID, 4 Prüfmeldungen, 25 %, 98,00 EUR akzeptiertes Netto |
+| Fehlerhafte Bankdatei | Erwarteter Zahlenformatfehler; Ingest scheitert, alle drei Folgeschritte werden nicht ausgeführt; 0 geschriebene Zeilen laut Laufanzeige |
+
+Die [Nachweise](databricks/jobs/README.md) unterscheiden Cloud-Ausgaben von lokalen
+Prüfungen. Alle **41 portablen Databricks-Tests** liefen am 26. Oktober 2026
+lokal erfolgreich; sie ersetzen keine Spark-/Delta-Ausführung.
+
+Die am 26. Oktober geprüfte [Job-Konfiguration](databricks/jobs/payment_reconciliation_job.json)
+begrenzt parallele Läufe dieses Jobs auf einen und deaktiviert zusätzliche
+Task-Wiederholungen. `<your-user>` in den Notebook-Pfaden muss vor Verwendung
+ersetzt werden. Die beobachteten Cloud-Läufe fanden vor der letzten Änderung
+der Wiederholungseinstellungen statt; diese Einstellungen sind anhand des
+anschließenden Exports geprüft.
+
+Das Beispiel verwendet kleine synthetische Daten und serielle Verarbeitung.
+Es ist kein Last-/Mehrbenutzer-Benchmark und keine vollständige Deployment-Lösung.
 Die PostgreSQL/dbt-Pipeline bleibt die vollständige ausführbare Referenz.
 
 ## Datenfluss
