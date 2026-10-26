@@ -1,0 +1,45 @@
+Repeat four-task Databricks job - 23 October 2026
+
+Evidence: two learner-supplied screenshots, showing Ingest and report task
+outputs for the same new Job run ID. This is a manually transcribed evidence
+record, not a downloaded backend log. Personal account details are omitted.
+
+Job: payment-reconciliation-demo
+Job run ID: 238559574710030
+Earlier verified Job run ID: 569445875628778 (21 October 2026)
+Scenario: 02_updated
+Delivery ID: 928cceb410a894c9ee04ac9d58c33100e4997d9a23d84b6125d73a5b81f3a27d
+
+Ingest task: Succeeded
+Same delivery already loaded.
+Payment rows added: 0
+Bank rows added: 0
+Status: ready
+Stored source counts displayed: 5 payment rows and 4 bank rows.
+
+Report task: Succeeded
+Gold report checked and saved successfully.
+Saved report run ID: d0d98c27-c6c7-46ee-b2e5-c0e9605d1725
+Earlier report runs were not overwritten.
+total_bank_records: 4
+distinct_payment_count: 4
+valid_payment_count: 2
+flagged_payment_ids: 2
+finding_rows: 3
+validation_pass_rate_pct: 50.00
+Daily: flagged_payment_count=2; payment_error_row_count=3;
+duplicate_payment_id_count=1; valid_net_amount_eur=147.00.
+Saved runs for this delivery: 4.
+
+The new report ID differs from the earlier verified report ID
+5e5d5e98-9e38-4e97-9b4c-1783dc47d9c6. The outputs support repeat loading
+without extra raw rows and a separate successful report for the same input.
+The report notebook states that earlier reports were not overwritten; its
+saved-run count is now four. The screenshots do not independently compare all
+contents of every historical report. Ingest and report success are directly
+visible; the intermediate task outputs and overall run graph are not shown
+in these two images.
+
+Still pending through Jobs: initial-example selection, malformed-input failure
+propagation, verified concurrency/retry settings and a sanitised actual job
+configuration export. This repeat does not establish those other checks.

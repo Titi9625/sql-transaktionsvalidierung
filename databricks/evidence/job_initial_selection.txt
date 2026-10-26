@@ -1,0 +1,47 @@
+Initial-example selection through Databricks Jobs - observed 25 October 2026
+
+Evidence: two learner-supplied screenshots of Ingest and report outputs. Both
+show Job run ID 716287669097190. This is a manual transcription of screenshot
+evidence, not a downloaded backend log. No account email is reproduced.
+
+Job: payment-reconciliation-demo
+Job run ID: 716287669097190
+Resolved expected_scenario: 01_initial
+Resolved input_folder:
+/Volumes/workspace/reconciliation_bronze/incoming_files/01_initial
+Delivery ID: 8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d
+
+Ingest task: Succeeded
+Same delivery already loaded.
+Payment rows added: 0
+Bank rows added: 0
+Status: ready
+Stored payment_row_count: 5
+Stored bank_row_count: 3
+Published batch_id belongs to this initial delivery.
+
+Report task: Succeeded
+Gold report checked and saved successfully.
+Saved report run ID: af7c4b41-43da-4f27-8b54-7926680db617
+Earlier report runs were not overwritten.
+total_payment_records: 5
+total_bank_records: 3
+distinct_payment_count: 4
+valid_payment_count: 1
+flagged_payment_ids: 3
+finding_rows: 4
+Daily: flagged_payment_count=3; payment_error_row_count=4;
+duplicate_payment_id_count=1; validation_pass_rate_pct=25.00;
+valid_net_amount_eur=98.00.
+Saved runs for this delivery: 3.
+Environment version 6 is visible in the report output.
+
+The job processed the explicitly selected older initial delivery even though
+the updated delivery had previously been processed. Input selection did not
+silently choose the most recent delivery. The report's published batch_id
+matches ingestion. The full intermediate task outputs/run graph are not shown
+in these two screenshots. Displayed saved-run counts and the notebook's
+retention message do not independently compare all historical report contents.
+
+Still pending: malformed-input failure propagation through Jobs, actual
+concurrency/retry setting evidence and a sanitised job definition export.

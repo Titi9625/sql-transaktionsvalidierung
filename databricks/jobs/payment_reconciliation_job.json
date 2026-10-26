@@ -1,0 +1,124 @@
+{
+  "name": "payment-reconciliation-demo",
+  "email_notifications": {
+    "no_alert_for_skipped_runs": false
+  },
+  "webhook_notifications": {},
+  "timeout_seconds": 0,
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "Ingest",
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/payment_reconciliation_job/01_ingest_bronze",
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default",
+      "disabled": false,
+      "max_retries": 0,
+      "min_retry_interval_millis": 900000,
+      "retry_on_timeout": false,
+      "disable_auto_optimization": true
+    },
+    {
+      "task_key": "prepare",
+      "depends_on": [
+        {
+          "task_key": "Ingest"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/payment_reconciliation_job/02_prepare_silver",
+        "base_parameters": {
+          "batch_id": "{{tasks.Ingest.values.batch_id}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default",
+      "disabled": false,
+      "max_retries": 0,
+      "min_retry_interval_millis": 900000,
+      "retry_on_timeout": false,
+      "disable_auto_optimization": true
+    },
+    {
+      "task_key": "validate",
+      "depends_on": [
+        {
+          "task_key": "prepare"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/payment_reconciliation_job/03_validate_silver",
+        "base_parameters": {
+          "batch_id": "{{tasks.Ingest.values.batch_id}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "webhook_notifications": {},
+      "environment_key": "Default",
+      "disabled": false,
+      "max_retries": 0,
+      "min_retry_interval_millis": 900000,
+      "retry_on_timeout": false,
+      "disable_auto_optimization": true
+    },
+    {
+      "task_key": "report",
+      "depends_on": [
+        {
+          "task_key": "validate"
+        }
+      ],
+      "run_if": "ALL_SUCCESS",
+      "notebook_task": {
+        "notebook_path": "/Workspace/Users/<your-user>/payment_reconciliation_job/04_report_gold",
+        "base_parameters": {
+          "batch_id": "{{tasks.Ingest.values.batch_id}}"
+        },
+        "source": "WORKSPACE"
+      },
+      "timeout_seconds": 0,
+      "email_notifications": {},
+      "environment_key": "Default",
+      "disabled": false,
+      "max_retries": 0,
+      "min_retry_interval_millis": 900000,
+      "retry_on_timeout": false,
+      "disable_auto_optimization": true
+    }
+  ],
+  "queue": {
+    "enabled": true
+  },
+  "parameters": [
+    {
+      "name": "input_folder",
+      "default": "/Volumes/workspace/reconciliation_bronze/incoming_files/02_updated"
+    },
+    {
+      "name": "expected_scenario",
+      "default": "02_updated"
+    }
+  ],
+  "environments": [
+    {
+      "environment_key": "Default",
+      "spec": {
+        "environment_version": "6"
+      }
+    }
+  ],
+  "performance_target": "PERFORMANCE_OPTIMIZED"
+}

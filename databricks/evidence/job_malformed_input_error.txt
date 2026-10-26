@@ -1,0 +1,45 @@
+Malformed-input ingestion failure through Jobs - observed 25 October 2026
+
+Evidence: learner-supplied run-history, Ingest error and detailed run-graph screenshots.
+These are manually transcribed observations, not downloaded backend logs.
+
+Job run ID: 474488750298099
+Run history: Failed; RunExecutionError.
+Ingest task: Failed.
+Resolved input folder:
+/Volumes/workspace/reconciliation_bronze/incoming_files/03_broken_format
+The expected_scenario row has no visible value in this screenshot; the intended
+override was none. Its exact submitted value is not independently confirmed.
+
+Observed error:
+ValueError: bank.csv: data row 4: amount must be numeric with at most two decimals
+
+Task metrics shown:
+Number of queries: 10
+Rows read: 30
+Rows written: 0
+Environment version: 6
+
+The attempt selector shows "Retry: 1st (latest)". A retried attempt is visible,
+but these screenshots alone do not establish the configured retry policy,
+serverless auto-optimisation settings or whether a manual action contributed.
+The effective retry configuration must be reviewed before calling setup final.
+
+Verified: the selected malformed bank file triggers the expected numeric-format
+error inside the job, and this task's displayed write count is zero.
+The detailed graph for the same run confirms:
+- Ingest: Failed; 2 attempts.
+- prepare: Upstream failed; duration 0 seconds.
+- validate: Upstream failed; duration 0 seconds.
+- report: Upstream failed; duration 0 seconds.
+- Overall status: Failed; started 25 October 2026 at 20:26 and ended at 20:27
+  in the workspace display. The overall displayed write count is zero.
+
+This verifies malformed-input failure propagation: downstream preparation,
+validation and report tasks did not execute. No Gold report was produced by
+this job's report task. It does not compare all pre-existing stored data or
+exclude unrelated external writers. Earlier isolated malformed-input checks
+compare stored contents separately.
+
+Still pending: actual concurrency/retry settings, a sanitised actual job export,
+documentation commit/push and latest CI result.

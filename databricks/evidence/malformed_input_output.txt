@@ -1,0 +1,9 @@
+User-reported Databricks execution output, 20 October 2026.
+Check: check_malformed_input_cell.py, executed in notebook 01_ingest_bronze.
+This is the supplied stdout transcript, not an independently captured backend log.
+
+Initial raw rows checked: 5 payment / 3 bank.
+Updated raw rows checked: 5 payment / 4 bank.
+Expected rejection: bank.csv: data row 4: amount must be numeric with at most two decimal places
+PASS: broken input rejected before loading.
+PASS: batch registry, raw histories and saved report contents unchanged.

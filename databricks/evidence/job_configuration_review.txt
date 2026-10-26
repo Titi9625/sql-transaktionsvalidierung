@@ -1,0 +1,49 @@
+Final job configuration review - 26 October 2026
+
+Source: revised complete JSON supplied by the learner after saving all four
+retry policies in Databricks. This is an export review, not a live API query.
+The public JSON replaces the personal notebook-owner path with <your-user>.
+Replace that placeholder before importing/creating a job from the settings.
+
+Verified in the revised export:
+- max_concurrent_runs=1 and queue.enabled=true. Runs of this job are serial;
+  waiting runs can queue. Other jobs/manual notebooks are not locked out.
+- Four enabled tasks: Ingest -> prepare -> validate -> report.
+- run_if=ALL_SUCCESS on all tasks; correct downstream dependencies.
+- Each downstream task receives {{tasks.Ingest.values.batch_id}}.
+- Only input_folder and expected_scenario are job parameters. Both default to
+  02_updated; there is no job-level batch_id replacing ingestion's output.
+- All four tasks have max_retries=0, retry_on_timeout=false, and
+  disable_auto_optimization=true.
+- min_retry_interval_millis=900000 is retained from the real export. It is a
+  15-minute retry delay, but no configured task retry will use it when retries
+  and additional serverless retry optimisation are disabled.
+- WORKSPACE notebook source, environment version 6, PERFORMANCE_OPTIMIZED.
+- No schedule, continuous mode, or file/table trigger in this export.
+- No notifications have recipient destinations in this exported configuration.
+
+Observed cloud checks are separate evidence:
+- Updated delivery repeat: 238559574710030, 0/0 additional rows and a new report.
+- Explicit initial delivery: 716287669097190, 1 accepted ID / 4 findings / 25%.
+- Malformed input: 474488750298099, expected bank-row-4 ValueError; Ingest failed
+  after two attempts, all downstream tasks Upstream failed, zero displayed writes.
+Those runs preceded the final retry-policy change. They do not prove a new
+one-attempt execution after this change. Configuration values are verified from
+this new export; no additional post-change cloud run is claimed.
+
+Local portable verification on 26 October 2026:
+python -B -m unittest discover -s tests -p "test_databricks_*.py" -v
+Ran 41 tests; OK. Executed against the actual repository files with bytecode
+writing disabled. These helper/SQL adapter checks do not execute Spark or Delta.
+
+Limits: this remains a small synthetic serial prototype. Gold deliberately
+appends a new report UUID per successful invocation. Exactly-once reporting
+across late failures/automatic retries is not implemented. Disabling extra
+retries is a deliberate prototype setting, not general production guidance.
+Imported workspace notebooks are manual copies; a Git push does not update them.
+This export omits credentials but still needs the user-path placeholder replaced.
+It is not a complete deployment bundle or a secret/permission provisioning tool.
+
+References checked 26 October 2026:
+https://docs.databricks.com/aws/en/jobs/run-serverless-jobs#configure-serverless-compute-auto-optimization-to-disallow-retries
+https://docs.databricks.com/aws/en/jobs/configure-task#set-a-retry-policy
