@@ -1,0 +1,4 @@
+validation_run_id,captured_at,batch_id,source_row_number,bank_source_row_number,bank_transaction_id,transaction_id,transaction_date,amount_gross,fee_amount,amount_net,bank_amount,currency,status,validation_status
+af7c4b41-43da-4f27-8b54-7926680db617,2026-10-25T18:18:31.936Z,8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d,1,1,bank_101,txn_101,2026-10-01,100.00,2.00,98.00,98.00,EUR,available,valid
+d0d98c27-c6c7-46ee-b2e5-c0e9605d1725,2026-10-23T14:15:38.651Z,928cceb410a894c9ee04ac9d58c33100e4997d9a23d84b6125d73a5b81f3a27d,1,1,bank_101,txn_101,2026-10-01,100.00,2.00,98.00,98.00,EUR,available,valid
+d0d98c27-c6c7-46ee-b2e5-c0e9605d1725,2026-10-23T14:15:38.651Z,928cceb410a894c9ee04ac9d58c33100e4997d9a23d84b6125d73a5b81f3a27d,2,4,bank_102,txn_102,2026-10-01,50.00,1.00,49.00,49.00,EUR,available,valid
