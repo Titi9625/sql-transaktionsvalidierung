@@ -1,0 +1,6 @@
+Valid Payments =
+IF (
+    HASONEVALUE ( report_runs[validation_run_id] ),
+    COALESCE ( COUNTROWS ( valid_payments ), 0 ),
+    BLANK ()
+)

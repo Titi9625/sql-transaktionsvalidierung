@@ -1,0 +1,72 @@
+{
+  "verified_on": "2026-11-04",
+  "method": "Direct Power Query and Power BI Desktop UI inspection",
+  "scope": "Preparation, model, single-selection slicer and first working Card; report still in progress",
+  "query_previews": {
+    "report_runs": {
+      "columns": 27,
+      "rows": 2
+    },
+    "valid_payments": {
+      "columns": 15,
+      "rows": 3
+    },
+    "findings": {
+      "columns": 11,
+      "rows": 7
+    },
+    "daily_reports": {
+      "columns": 14,
+      "rows": 2
+    }
+  },
+  "relationships": {
+    "parent": "report_runs",
+    "children": [
+      "daily_reports",
+      "findings",
+      "valid_payments"
+    ],
+    "key": "validation_run_id",
+    "count": 3,
+    "active": true,
+    "cardinality": "one-to-many",
+    "cross_filter": "single, parent to detail"
+  },
+  "slicer": {
+    "field": "report_runs.delivery_name",
+    "single_select": true,
+    "restored_selection": "02 Updated delivery"
+  },
+  "measure": {
+    "name": "Valid Payments",
+    "home_table": "report_runs",
+    "format": "whole number, zero decimals",
+    "expression_matches_source": true
+  },
+  "native_card_checks": [
+    {
+      "selected": "02 Updated delivery",
+      "value": 2
+    },
+    {
+      "selected": "01 Initial delivery",
+      "value": 1
+    },
+    {
+      "selected": "02 Updated delivery",
+      "value": 2
+    }
+  ],
+  "saved_pbix": {
+    "file": "payment_reconciliation.pbix",
+    "bytes": 166709,
+    "sha256": "e96d5df0f5872fd09fcec19f0869b71875a3bd6b2b506ddae17a9d480a6f5d36"
+  },
+  "limits": [
+    "No native test of zero-result or ambiguous-run guard branches",
+    "Findings/daily-report interactive propagation checks pending",
+    "Remaining metrics, exceptions table, final layout and walkthrough pending",
+    "Local imported CSV snapshot; no live Databricks connection"
+  ]
+}
