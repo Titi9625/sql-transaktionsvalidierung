@@ -1,28 +1,14 @@
 # Power BI model
 
-Model settings inspected directly in Power BI Desktop on 4 November 2026.
+The delivery selector uses `report_runs.delivery_name`. Each label in this export maps to one saved run. The three relationships between the imported tables use the full `validation_run_id` and filter in one direction from `report_runs` to the detail tables.
 
-| Parent | Child | Key in both tables | Cardinality | Filter direction | Status |
-|---|---|---|---|---|---|
-| report_runs | daily_reports | validation_run_id | One to many | Parent to child only | Active |
-| report_runs | findings | validation_run_id | One to many | Parent to child only | Active |
-| report_runs | valid_payments | validation_run_id | One to many | Parent to child only | Active |
+| Table | One row represents | Demo rows |
+|---|---|---:|
+| `report_runs` | One selected saved report run | 2 |
+| `valid_payments` | One accepted payment result within a run | 3 |
+| `findings` | One detected issue within a run | 7 |
+| `daily_reports` | One payment date and source group within a run | 2 |
 
-These are the only three relationships. The two automatically inferred inactive batch_id links through daily_reports were removed by the learner. All three final settings were verified in Manage relationships, and the file was saved.
+`report_runs.validation_run_id` is unique on the one side of each active relationship. Both deliveries contain four distinct payment IDs. The pass rate uses that count as the denominator. Raw row counts include duplicated IDs, and a payment can have multiple findings.
 
-## Table grain
-
-- report_runs: one selected saved validation run per delivery in this export.
-- daily_reports: one payment-date/source group within a saved validation run. The current small demo contains one group per run; the relationship allows future multi-day deliveries.
-- valid_payments: one accepted payment result within a saved validation run.
-- findings: one detected issue within a saved validation run. Multiple issues or duplicate source rows can refer to the same payment ID.
-
-Use report_runs to choose the delivery/run. The initial and updated deliveries are successive snapshots of the same payment population; they must not be totalled as additional business payments. Join results by the full validation_run_id, which identifies the saved report version, rather than by a shortened display label or transaction_id alone.
-
-## First interactive acceptance check
-
-Screen select.png confirms a delivery_name slicer with Single select On. The first Card visual uses the Valid Payments measure documented in measures/. Its complete DAX formula, home table report_runs and whole-number format were inspected directly in Power BI Desktop.
-
-Native test on 4 November 2026: Updated delivery showed 2, switching to Initial delivery changed the card to 1, and switching back to Updated restored 2. The working PBIX was then saved. This proves filter propagation from report_runs to valid_payments for the two demo selections.
-
-The CSV snapshot is imported locally; this is not a live Databricks connection. Filter propagation to findings and daily_reports, further measures, zero/ambiguous-selection behaviour, report layout and final acceptance are still pending.
+The findings table displays the source row number as a field without aggregation. This keeps rows 3 and 4 visible separately when both refer to `txn_103`. The report shows findings at source row and issue level. The daily summaries are available in the model for review.

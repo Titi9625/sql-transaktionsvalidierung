@@ -1,0 +1,6 @@
+Accepted Net EUR =
+IF (
+    HASONEVALUE ( report_runs[validation_run_id] ),
+    COALESCE ( SUM ( valid_payments[amount_net] ), 0 ),
+    BLANK ()
+)

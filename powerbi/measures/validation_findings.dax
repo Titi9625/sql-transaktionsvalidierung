@@ -1,0 +1,6 @@
+Validation Findings =
+IF (
+    HASONEVALUE ( report_runs[validation_run_id] ),
+    COALESCE ( COUNTROWS ( findings ), 0 ),
+    BLANK ()
+)

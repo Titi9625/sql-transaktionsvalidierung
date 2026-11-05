@@ -1,9 +1,12 @@
 # Report measures
 
-`valid_payments.dax` is implemented as a Power BI measure, with its home table set to report_runs and its display format set to whole number. Its full expression was inspected in Power BI Desktop and matches the source file.
+All four measures are in `report_runs`. They return blank unless one saved run is in scope, which keeps the two deliveries separate.
 
-It counts accepted result rows in the currently selected saved run, returning zero for an empty accepted-results set. It returns blank when more than one (or no) run is in scope, protecting against adding successive delivery snapshots together.
+| Measure | Calculation | Display |
+|---|---|---|
+| [Valid Payments](valid_payments.dax) | Count accepted payment rows | Whole number |
+| [Accepted Net EUR](accepted_net_eur.dax) | Sum accepted payments after fees | Euro with two decimals |
+| [Validation Pass Rate](validation_pass_rate.dax) | Divide valid payments by the selected run's distinct payment count | Percentage with zero decimals |
+| [Validation Findings](validation_findings.dax) | Count findings rows | Whole number |
 
-The table grain is one accepted payment result within a saved validation run. Native Card checks observed directly on 4 November 2026: select 02 Updated delivery -> 2; select 01 Initial delivery -> 1; restore 02 Updated delivery -> 2, then save. The visual correctly responds to the delivery selector.
-
-The learner screenshot Screen select.png confirms a delivery_name slicer with Single select On. Empty-data and ambiguous-run guard branches have not been executed in the native model; their behaviour is specified by the expression but is not claimed as an observed test result.
+The pass rate uses a fraction such as 0.5, which Power BI displays as 50%. The exported summary's percentage column stores percentage points, so its equivalent value is 50.
