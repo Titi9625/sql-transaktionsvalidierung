@@ -1,0 +1,72 @@
+{
+  "verified_on": "2026-11-03",
+  "status": "Four source CSVs verified. Power BI import, model and report are pending.",
+  "source": "Saved Databricks Gold results from the synthetic payment-reconciliation prototype.",
+  "selection": "One explicitly selected report per initial/updated delivery; all four queries use the same pinned UUIDs.",
+  "reports": [
+    {
+      "scenario": "01_initial",
+      "validation_run_id": "af7c4b41-43da-4f27-8b54-7926680db617",
+      "batch_id": "8199572c3db5105dd6a290e6fc969eea50df9f896301a23881f6febbfe98936d",
+      "captured_at": "2026-10-25T18:18:31.936Z",
+      "distinct_payment_count": 4,
+      "valid_payment_count": 1,
+      "flagged_payment_count": 3,
+      "finding_rows": 4,
+      "validation_pass_rate_pct": "25.00",
+      "valid_net_amount_eur": "98.00"
+    },
+    {
+      "scenario": "02_updated",
+      "validation_run_id": "d0d98c27-c6c7-46ee-b2e5-c0e9605d1725",
+      "batch_id": "928cceb410a894c9ee04ac9d58c33100e4997d9a23d84b6125d73a5b81f3a27d",
+      "captured_at": "2026-10-23T14:15:38.651Z",
+      "distinct_payment_count": 4,
+      "valid_payment_count": 2,
+      "flagged_payment_count": 2,
+      "finding_rows": 3,
+      "validation_pass_rate_pct": "50.00",
+      "valid_net_amount_eur": "147.00"
+    }
+  ],
+  "files": [
+    {
+      "path": "data/report_runs.csv",
+      "source_view": "workspace.reconciliation_gold.saved_validation_summaries",
+      "rows": 2,
+      "sha256": "38b93a864873aa9cf1c852848b1a7f26e7eb63fa0e378db0dde4ebdb0e9990fe"
+    },
+    {
+      "path": "data/valid_payments.csv",
+      "source_view": "workspace.reconciliation_gold.saved_valid_payments",
+      "rows": 3,
+      "sha256": "e8e5d03298f001fc3c3bfa49330f3009dc3d2c59acc8232c8a2fce76a6cfa59e"
+    },
+    {
+      "path": "data/findings.csv",
+      "source_view": "workspace.reconciliation_gold.saved_validation_findings",
+      "rows": 7,
+      "sha256": "51ba298ee0509a3916738e80b450d3f17e7611551ec699005d2eef615d889d08"
+    },
+    {
+      "path": "data/daily_reports.csv",
+      "source_view": "workspace.reconciliation_gold.saved_daily_reports",
+      "rows": 2,
+      "sha256": "0e6c183e45a90174305a1479f229117e8c695b9b40488cca662f189c45513b88"
+    }
+  ],
+  "format": {
+    "encoding": "UTF-8 without BOM",
+    "delimiter": ",",
+    "decimal_separator": ".",
+    "date_format": "YYYY-MM-DD",
+    "timestamp_format": "ISO 8601 UTC (Z)",
+    "missing_related_bank_row_number": "literal null text; convert to a missing value before numeric typing"
+  },
+  "limits": [
+    "This is a saved-result CSV snapshot, not a live connection.",
+    "Both deliveries describe successive snapshots of the same payment population; do not sum them as new business transactions.",
+    "Capture order differs from scenario order because the older delivery was deliberately rerun.",
+    "Rates in the CSV are 25.00 and 50.00; calculate valid/total for a percentage measure rather than directly formatting these numbers as percentages."
+  ]
+}

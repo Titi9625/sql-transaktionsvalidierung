@@ -1,0 +1,63 @@
+{
+  "checked_on": "2026-11-05",
+  "saved_project": {
+    "page": "Delivery Overview",
+    "default_delivery": "02 Updated delivery",
+    "measure_formats": {
+      "Valid Payments": "0",
+      "Accepted Net EUR": "€#,##0.00",
+      "Validation Pass Rate": "0%;-0%;0%",
+      "Validation Findings": "0"
+    },
+    "findings_columns": [
+      "Source row",
+      "Payment ID",
+      "Issue",
+      "Explanation"
+    ]
+  },
+  "observed_in_desktop_screenshot": {
+    "delivery": "02 Updated delivery",
+    "valid_payments": 2,
+    "accepted_net_eur": "147.00",
+    "pass_rate_pct": 50,
+    "findings": 3,
+    "duplicate_source_rows": [
+      3,
+      4
+    ],
+    "description": "Finished Layout.png showed three detail rows including the two duplicate source rows and the amount mismatch."
+  },
+  "expected_from_source_csvs": {
+    "01_initial": {
+      "valid_payments": 1,
+      "accepted_net_eur": "98.00",
+      "pass_rate_pct": 25,
+      "findings": 4,
+      "findings_by_issue": {
+        "amount_mismatch": 1,
+        "duplicate_transaction_id": 2,
+        "pending_transaction": 1
+      },
+      "duplicate_source_rows": [
+        3,
+        4
+      ]
+    },
+    "02_updated": {
+      "valid_payments": 2,
+      "accepted_net_eur": "147.00",
+      "pass_rate_pct": 50,
+      "findings": 3,
+      "findings_by_issue": {
+        "duplicate_transaction_id": 2,
+        "amount_mismatch": 1
+      },
+      "duplicate_source_rows": [
+        3,
+        4
+      ]
+    }
+  },
+  "verification_scope": "Checked saved report definitions, measure expressions, and source totals. The initial scenario values are source checks here. No live connection or Power BI service deployment was exercised."
+}

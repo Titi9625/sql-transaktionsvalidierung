@@ -1,0 +1,9 @@
+Validation Pass Rate =
+IF (
+    HASONEVALUE ( report_runs[validation_run_id] ),
+    DIVIDE (
+        [Valid Payments],
+        MAX ( report_runs[distinct_payment_count] )
+    ),
+    BLANK ()
+)
