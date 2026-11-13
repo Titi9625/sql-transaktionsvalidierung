@@ -13,6 +13,15 @@ erfolgreiche Validierungsergebnisse unter eigenen Lauf-IDs.
 Der optionale Stripe-Test-API-Import bleibt ein separater Proof of Concept;
 er speist diese CSV-Pipeline nicht.
 
+## Projekt auf einen Blick
+
+| Einstieg | Was du dort siehst |
+|---|---|
+| [Python, PostgreSQL und dbt](#datenfluss) | Die ELT-Pipeline prüft und lädt CSV-Paare, gleicht Zahlungen mit Bankbuchungen ab und speichert die Ergebnisse je Lauf. |
+| [Databricks Free Edition](databricks/DEMO.md) | Ein Drei-Minuten-Beispiel zeigt, wie ein Job die Daten lädt, aufbereitet, prüft und Kennzahlen speichert. |
+| [Power BI](powerbi/README.md) | Der Bericht vergleicht zwei Datenlieferungen anhand gültiger Zahlungen, akzeptierter Nettobeträge und Prüfmeldungen. |
+| [Azure](azure_demo/README.md) | Ein separater Formatcheck für Bank-CSV-Dateien startet per Event Grid beim Upload. Eine Azure Function speichert das Ergebnis als JSON. |
+
 ## Technischer Schwerpunkt
 
 | Bereich | Umsetzung |
